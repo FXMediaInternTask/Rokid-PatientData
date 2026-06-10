@@ -1,0 +1,77 @@
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history required for accurate blame & new-code detection
+
+      - name: Set up JDK 21
+        id: setup-java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: |
+            ${{ runner.os }}-sonar
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Inject signing properties (optional)
+        run: |
+          {
+            echo "RELEASE_STORE_FILE=${{ secrets.RELEASE_STORE_FILE }}"
+            echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}"
+            echo "RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD }}"
+            echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}"
+          } >> local.properties
+
+      - name: Prepare SN auth resource (single source)
+        shell: bash
+        run: |
+          mkdir -p app/src/main/res/raw
+          rm -f app/src/main/res/raw/sn_auth_file.*
+
+          if [ -n "${{ secrets.SN_AUTH_FILE_BASE64 }}" ]; then
+            echo "${{ secrets.SN_AUTH_FILE_BASE64 }}" | base64 --decode > app/src/main/res/raw/sn_auth_file.lc
+          else
+            echo "sn_auth_placeholder_for_ci" > app/src/main/res/raw/sn_auth_file.lc
+          fi
+
+      - name: Build
+        run: ./gradlew --no-daemon clean build --stacktrace
+        env:
+          JAVA_HOME: ${{ steps.setup-java.outputs.path }}
+
+      - name: SonarCloud analysis
+        if: env.SONAR_TOKEN != ''
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew --no-daemon sonar --info

@@ -113,7 +113,12 @@ fun PhoneMainScreen(
                         onDisconnect = { viewModel.disconnect() },
                         onSendAnnotation = { viewModel.sendTestAnnotation(it) },
                         isLoggedIn = uiState.isLoggedIn,
-                        onLogin = { viewModel.performLogin() }
+                        isLoginLoading = uiState.isLoginLoading,
+                        onLogin = { viewModel.performLogin() },
+                        onTestAzure = { viewModel.testAzureSTT() },
+                        isAzureValid = uiState.isAzureValid,
+                        isAzureChecking = uiState.isAzureChecking,
+                        onResetConversation = { viewModel.resetConversation() }
                     )
                 }
             }

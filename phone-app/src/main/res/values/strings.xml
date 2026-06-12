@@ -102,7 +102,21 @@
     <string name="select_language">Select Language</string>
     <string name="app_language">App Language</string>
     <string name="response_language">AI Response Language</string>
-    
+
+    <!-- Language Names -->
+    <string name="lang_en">English</string>
+    <string name="lang_zh_cn">Simplified Chinese</string>
+    <string name="lang_zh_tw">Traditional Chinese</string>
+    <string name="lang_ko">Korean</string>
+    <string name="lang_ja">Japanese</string>
+    <string name="lang_fr">French</string>
+    <string name="lang_de">German</string>
+    <string name="lang_es">Spanish</string>
+    <string name="lang_it">Italian</string>
+    <string name="lang_ru">Russian</string>
+    <string name="lang_th">Thai</string>
+    <string name="lang_vi">Vietnamese</string>
+
     <!-- Status Messages -->
     <string name="settings_complete">Settings complete, ready to use</string>
     <string name="please_enter_api_key">Please enter %s API Key</string>

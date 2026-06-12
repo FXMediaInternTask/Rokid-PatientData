@@ -19,6 +19,7 @@ class TokenManager(context: Context) {
 
     companion object {
         private const val KEY_TOKEN = "auth_token"
+        private const val KEY_SESSION_ID = "current_session_id"
     }
 
     fun saveToken(token: String) {
@@ -31,5 +32,17 @@ class TokenManager(context: Context) {
 
     fun deleteToken() {
         sharedPreferences.edit().remove(KEY_TOKEN).apply()
+    }
+
+    fun saveSessionId(sessionId: String?) {
+        sharedPreferences.edit().putString(KEY_SESSION_ID, sessionId).apply()
+    }
+
+    fun getSessionId(): String? {
+        return sharedPreferences.getString(KEY_SESSION_ID, null)
+    }
+
+    fun deleteSessionId() {
+        sharedPreferences.edit().remove(KEY_SESSION_ID).apply()
     }
 }

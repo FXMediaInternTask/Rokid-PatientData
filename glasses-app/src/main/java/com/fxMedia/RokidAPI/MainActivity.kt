@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +36,7 @@ import com.fxMedia.RokidAPI.service.WakeWordService
 import com.fxMedia.RokidAPI.ui.theme.RokidGlassesTheme
 import com.fxMedia.RokidAPI.viewmodel.GlassesViewModel
 import com.fxMedia.RokidAPI.viewmodel.GlassesUIState
+import com.fxMedia.RokidAPI.viewmodel.AppScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -114,7 +117,11 @@ class MainActivity : ComponentActivity() {
     private fun startServices() {
         if (!WakeWordService.isRunning) {
             val serviceIntent = Intent(this, WakeWordService::class.java)
-            startForegroundService(serviceIntent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
         }
     }
 
@@ -127,49 +134,170 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TranslateMainScreen(viewModel: GlassesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val appScreen by viewModel.appScreen.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        if (!uiState.isConnected) {
-            ConnectionScreen(
-                uiState = uiState,
-                onScreenTap = {
-                    viewModel.onPrimaryTap()
-                },
-                onDeviceSelected = { device ->
-                    viewModel.connectToDevice(device)
-                },
-                showDeviceSelector = uiState.showDeviceSelector,
-                onDismissDeviceSelector = { viewModel.dismissDeviceSelector() }
-            )
-        } else {
-            TranslateMainScreenContent(
-                isConnected = uiState.isConnected,
-                isListening = uiState.isListening,
-                isProcessing = uiState.isProcessing,
-                displayText = uiState.displayText,
-                hintText = uiState.hintText,
-                connectedDeviceName = uiState.connectedDeviceName,
-                cxrConnectedPhoneName = uiState.cxrConnectedPhoneName,
-                availableDevices = uiState.availableDevices,
-                showDeviceSelector = uiState.showDeviceSelector,
-                onScreenTap = {
-                    viewModel.onPrimaryTap()
-                },
-                onDeviceSelected = { device ->
-                    viewModel.connectToDevice(device)
-                },
-                onDismissSelector = { viewModel.dismissDeviceSelector() }
-            )
+        AnimatedContent(
+            targetState = appScreen,
+            transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+            label = "screen_transition"
+        ) { screen ->
+            when (screen) {
+                is AppScreen.Main -> {
+                    if (!uiState.isConnected) {
+                        ConnectionScreen(
+                            uiState = uiState,
+                            onScreenTap = { viewModel.onPrimaryTap() },
+                            onDeviceSelected = { device -> viewModel.connectToDevice(device) },
+                            showDeviceSelector = uiState.showDeviceSelector,
+                            onDismissDeviceSelector = { viewModel.dismissDeviceSelector() }
+                        )
+                    } else {
+                        TranslateMainScreenContent(
+                            isConnected = uiState.isConnected,
+                            isListening = uiState.isListening,
+                            isProcessing = uiState.isProcessing,
+                            displayText = uiState.displayText,
+                            hintText = uiState.hintText,
+                            connectedDeviceName = uiState.connectedDeviceName,
+                            cxrConnectedPhoneName = uiState.cxrConnectedPhoneName,
+                            availableDevices = uiState.availableDevices,
+                            showDeviceSelector = uiState.showDeviceSelector,
+                            onScreenTap = { viewModel.onPrimaryTap() },
+                            onDeviceSelected = { device -> viewModel.connectToDevice(device) },
+                            onDismissSelector = { viewModel.dismissDeviceSelector() }
+                        )
+                    }
+                }
+                is AppScreen.Recording -> {
+                    RecordingScreen(
+                        displayText = uiState.displayText,
+                        isListening = uiState.isListening,
+                        isProcessing = uiState.isProcessing,
+                        onDone = { viewModel.onPrimaryTap() }
+                    )
+                }
+            }
         }
 
         AppVersionDisplay(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(20.dp)
+        )
+    }
+}
+
+@Composable
+fun RecordingScreen(
+    displayText: String, 
+    isListening: Boolean,
+    isProcessing: Boolean,
+    onDone: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { onDone() }
+    ) {
+        // Bottom gradient for text background
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.6f)
+                .align(Alignment.BottomCenter)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp, start = 32.dp, end = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = displayText,
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                lineHeight = 30.sp,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.4f), shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            if (isListening) {
+                RecordingIndicator()
+            } else if (isProcessing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    color = Color(0xFF64B5F6),
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Text(
+                    text = "Tap to dismiss",
+                    color = Color(0xFF64B5F6),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        
+        Text(
+            text = if (isListening) "Tap to finish" else "AI Assistant",
+            color = Color.White.copy(alpha = 0.3f),
+            fontSize = 12.sp,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 40.dp)
+        )
+    }
+}
+
+@Composable
+fun RecordingIndicator() {
+    val infiniteTransition = rememberInfiniteTransition(label = "rec")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "rec_alpha"
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(Color(0xFFF44336).copy(alpha = alpha), RoundedCornerShape(50))
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = "RECORDING",
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
         )
     }
 }
@@ -467,35 +595,6 @@ fun DeviceSelectorDialog(
     )
 }
 
-@Composable
-fun ConnectionStatusBadge(
-    connectedDeviceName: String? = null,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        color = Color(0xFF1E3A5F),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(Color(0xFF64B5F6), shape = RoundedCornerShape(50))
-            )
-            Text(
-                text = connectedDeviceName ?: "Connected",
-                color = Color.White,
-                fontSize = 11.sp
-            )
-        }
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  PREVIEWS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -508,7 +607,7 @@ fun PreviewTranslateMainScreen() {
             isConnected = true,
             isListening = false,
             isProcessing = false,
-            displayText = "Tap to send API",
+            displayText = "Tap to record",
             hintText = "Tap right of glasses",
             connectedDeviceName = "My Phone",
             cxrConnectedPhoneName = "My Phone",
@@ -535,6 +634,19 @@ fun PreviewConnectionScreen() {
             onDeviceSelected = {},
             showDeviceSelector = false,
             onDismissDeviceSelector = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun PreviewRecordingScreen() {
+    RokidGlassesTheme {
+        RecordingScreen(
+            displayText = "Testing recording UI...",
+            isListening = true,
+            isProcessing = false,
+            onDone = {}
         )
     }
 }

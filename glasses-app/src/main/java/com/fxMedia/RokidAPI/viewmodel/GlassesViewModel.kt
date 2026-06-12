@@ -4,6 +4,9 @@ import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModel
@@ -12,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import com.fxMedia.RokidAPI.sdk.CxrServiceManager
 import com.fxMedia.RokidAPI.service.BluetoothClientState
 import com.fxMedia.RokidAPI.service.BluetoothSppClient
+import com.fxMedia.rokidcommon.Constants
 import com.fxMedia.rokidcommon.protocol.ConnectionState
 import com.fxMedia.rokidcommon.protocol.Message
 import com.fxMedia.rokidcommon.protocol.MessageType
@@ -20,6 +24,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.io.ByteArrayOutputStream
+
+sealed class AppScreen {
+    object Main : AppScreen()
+    object Recording : AppScreen()
+}
 
 data class GlassesUIState(
     val isConnected: Boolean = false,
@@ -33,7 +43,8 @@ data class GlassesUIState(
     val availableDevices: List<BluetoothDevice> = emptyList(),
     val displayText: String = "Tap to start",
     val hintText: String = "Please connect phone",
-    val aiResponse: String = ""
+    val aiResponse: String = "",
+    val userTranscript: String = ""
 )
 
 class GlassesViewModel(
@@ -47,8 +58,15 @@ class GlassesViewModel(
     private val _uiState = MutableStateFlow(GlassesUIState())
     val uiState: StateFlow<GlassesUIState> = _uiState.asStateFlow()
 
+    private val _appScreen = MutableStateFlow<AppScreen>(AppScreen.Main)
+    val appScreen: StateFlow<AppScreen> = _appScreen.asStateFlow()
+
     private val bluetoothClient = BluetoothSppClient(context, viewModelScope)
     private var cxrServiceManager: CxrServiceManager? = null
+
+    private var audioRecord: AudioRecord? = null
+    private var recordingJob: Job? = null
+    private val audioBuffer = ByteArrayOutputStream()
 
     init {
         initializeBluetooth()
@@ -58,8 +76,8 @@ class GlassesViewModel(
     /**
      * Handles the temple tap / ENTER key logic:
      * 1. If not connected -> Show device list
-     * 2. If connected & idle -> Show "Tap to send API"
-     * 3. If "Tap to send API" is showing -> Send "FX API Test" to phone
+     * 2. If connected & idle -> Start recording
+     * 3. If recording -> Stop and send
      */
     fun onPrimaryTap() {
         val currentState = _uiState.value
@@ -70,17 +88,184 @@ class GlassesViewModel(
             return
         }
 
-        if (currentState.displayText == "Tap to send API") {
-            // Action: Send the API Test text
-            sendApiTest()
+        if (currentState.isListening) {
+            stopRecording()
         } else {
-            // Action: Show instruction
+            if (_appScreen.value == AppScreen.Main) {
+                startRecording()
+            } else {
+                // Return to main state after viewing a response
+                _appScreen.value = AppScreen.Main
+                _uiState.update { it.copy(displayText = "Tap to start", hintText = "Ready") }
+            }
+        }
+    }
+
+    fun startRecording() {
+        if (_uiState.value.bluetoothState != BluetoothClientState.CONNECTED) {
             _uiState.update {
                 it.copy(
-                    displayText = "Tap to send API",
-                    hintText = "Confirm to send test",
-                    isProcessing = false
+                    displayText = "Please connect phone",
+                    hintText = "Select paired device"
                 )
+            }
+            return
+        }
+
+        if (_uiState.value.isListening) return
+
+        // Explicit permission check
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "RECORD_AUDIO permission not granted")
+            _uiState.update {
+                it.copy(
+                    displayText = "Microphone permission required",
+                    isListening = false
+                )
+            }
+            return
+        }
+
+        _appScreen.value = AppScreen.Recording
+        audioBuffer.reset()
+
+        _uiState.update {
+            it.copy(
+                isListening = true,
+                displayText = "Listening...",
+                hintText = "Tap to stop",
+                userTranscript = "",
+                aiResponse = ""
+            )
+        }
+
+        viewModelScope.launch {
+            bluetoothClient.sendVoiceStart()
+        }
+
+        recordingJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bufferSize = AudioRecord.getMinBufferSize(
+                    Constants.AUDIO_SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                )
+
+                @Suppress("MissingPermission")
+                val recorder = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    Constants.AUDIO_SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize
+                )
+                audioRecord = recorder
+
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                    Log.e(TAG, "AudioRecord failed to initialize")
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                displayText = "Mic Init Failed",
+                                isListening = false
+                            )
+                        }
+                    }
+                    recorder.release()
+                    audioRecord = null
+                    return@launch
+                }
+
+                recorder.startRecording()
+                Log.d(TAG, "AudioRecord started")
+
+                val buffer = ByteArray(Constants.AUDIO_BUFFER_SIZE)
+                while (isActive && _uiState.value.isListening) {
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        synchronized(audioBuffer) { audioBuffer.write(buffer, 0, read) }
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Recording error", e)
+            } finally {
+                cleanupAudioRecord()
+            }
+        }
+    }
+
+    private fun cleanupAudioRecord() {
+        try {
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                audioRecord?.stop()
+            }
+            audioRecord?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "AudioRecord cleanup error", e)
+        }
+        audioRecord = null
+    }
+
+    fun stopRecording() {
+        _uiState.update {
+            it.copy(
+                isListening = false,
+                isProcessing = true,
+                displayText = "Sending...",
+                hintText = "Please wait"
+            )
+        }
+
+        recordingJob?.cancel()
+        recordingJob = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val audioData: ByteArray
+                synchronized(audioBuffer) { audioData = audioBuffer.toByteArray() }
+
+                if (audioData.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                isProcessing = false,
+                                displayText = "No voice detected",
+                                hintText = "Tap to try again"
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
+                val success = bluetoothClient.sendVoiceEnd(audioData)
+
+                if (!success) {
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                isProcessing = false,
+                                displayText = "Send Failed",
+                                hintText = "Check connection"
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            displayText = "Processing...",
+                            hintText = "AI is thinking"
+                        )
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping/sending", e)
             }
         }
     }
@@ -89,44 +274,24 @@ class GlassesViewModel(
         _uiState.update { it.copy(showDeviceSelector = false) }
     }
 
-    private fun sendApiTest() {
-        _uiState.update { 
-            it.copy(
-                displayText = "Sending...",
-                hintText = "Communicating with phone",
-                isProcessing = true
-            )
-        }
-
-        viewModelScope.launch {
-            val success = bluetoothClient.sendMessage(
-                Message(
-                    type = MessageType.USER_TRANSCRIPT,
-                    payload = "FX API Test"
-                )
-            )
-            
-            if (!success) {
-                _uiState.update { 
+    private fun handlePhoneMessage(message: Message) {
+        when (message.type) {
+            MessageType.USER_TRANSCRIPT -> {
+                _uiState.update {
                     it.copy(
-                        isProcessing = false,
-                        displayText = "Send Failed",
-                        hintText = "Check connection"
+                        userTranscript = message.payload ?: "",
+                        displayText = "You: ${message.payload ?: ""}"
                     )
                 }
             }
-        }
-    }
-
-    private fun handlePhoneMessage(message: Message) {
-        when (message.type) {
             MessageType.AI_RESPONSE_TEXT -> {
                 // Response back from API via Phone
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
+                        aiResponse = message.payload ?: "",
                         displayText = message.payload ?: "No response",
-                        hintText = "Tap to send again"
+                        hintText = "Tap to record again"
                     )
                 }
             }
@@ -221,6 +386,8 @@ class GlassesViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        recordingJob?.cancel()
+        cleanupAudioRecord()
         bluetoothClient.disconnect()
         cxrServiceManager?.release()
     }

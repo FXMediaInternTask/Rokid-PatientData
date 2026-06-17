@@ -316,20 +316,30 @@ private fun ConnectionStatusCard(
                     color = Color.Gray
                 )
                 Text(
-                    text = if (connectionState == ConnectionState.CONNECTED) (deviceName ?: "Connected") else "Disconnected",
+                    text = when (connectionState) {
+                        ConnectionState.CONNECTED -> deviceName ?: "Connected"
+                        ConnectionState.CONNECTING -> "Waiting for device..."
+                        else -> "Disconnected"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (connectionState == ConnectionState.CONNECTED) Color(0xFF81C784) else Color.White
+                    color = when (connectionState) {
+                        ConnectionState.CONNECTED -> Color(0xFF81C784)
+                        ConnectionState.CONNECTING -> Color(0xFF88B0C4)
+                        else -> Color.White
+                    }
                 )
             }
             
+            val isActive = connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING
+            
             Button(
-                onClick = if (connectionState == ConnectionState.CONNECTED) onDisconnect else onConnect,
+                onClick = if (isActive) onDisconnect else onConnect,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (connectionState == ConnectionState.CONNECTED) Color.Red.copy(alpha = 0.6f) else Color(0xFF88B0C4)
+                    containerColor = if (isActive) Color.Red.copy(alpha = 0.6f) else Color(0xFF88B0C4)
                 ),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(if (connectionState == ConnectionState.CONNECTED) "Stop" else "Connect")
+                Text(if (isActive) "Stop" else "Connect")
             }
         }
     }

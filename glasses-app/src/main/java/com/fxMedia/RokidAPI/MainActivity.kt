@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -37,6 +38,9 @@ import com.fxMedia.RokidAPI.ui.theme.RokidGlassesTheme
 import com.fxMedia.RokidAPI.viewmodel.GlassesViewModel
 import com.fxMedia.RokidAPI.viewmodel.GlassesUIState
 import com.fxMedia.RokidAPI.viewmodel.AppScreen
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.emptyFlow
 
 class MainActivity : ComponentActivity() {
 
@@ -73,6 +77,22 @@ class MainActivity : ComponentActivity() {
 
                 TranslateMainScreen(viewModel = viewModel)
             }
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        val viewModel = glassesViewModel ?: return super.onKeyDown(keyCode, event)
+
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                viewModel.onNavigateUp()
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                viewModel.onNavigateDown()
+                true
+            }
+            else -> super.onKeyDown(keyCode, event)
         }
     }
 
@@ -164,7 +184,6 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                             displayText = uiState.displayText,
                             hintText = uiState.hintText,
                             connectedDeviceName = uiState.connectedDeviceName,
-                            cxrConnectedPhoneName = uiState.cxrConnectedPhoneName,
                             availableDevices = uiState.availableDevices,
                             showDeviceSelector = uiState.showDeviceSelector,
                             onScreenTap = { viewModel.onPrimaryTap() },
@@ -181,6 +200,13 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                         onDone = { viewModel.onPrimaryTap() }
                     )
                 }
+                is AppScreen.Response -> {
+                    ResponseScreen(
+                        uiState = uiState,
+                        scrollEvent = viewModel.scrollEvent,
+                        onDone = { viewModel.onPrimaryTap() }
+                    )
+                }
             }
         }
 
@@ -189,6 +215,121 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                 .align(Alignment.BottomStart)
                 .padding(20.dp)
         )
+    }
+}
+
+@Composable
+fun ResponseScreen(
+    uiState: GlassesUIState,
+    scrollEvent: Flow<Int>,
+    onDone: () -> Unit
+) {
+    val rokidWhite = Color.White// STOPPPP EDITING THIS
+
+    // Reset page index whenever a new response arrives
+    var currentPageIndex by remember(uiState.aiResponse) { mutableIntStateOf(0) }
+
+    // Logic to split text into pages (4 lines per page)
+    val pages = remember(uiState.aiResponse) {
+        val lines = mutableListOf<String>()
+        uiState.aiResponse.split("\n").forEach { paragraph ->
+            if (paragraph.isBlank()) return@forEach
+            var currentLine = ""
+            val maxChars = 38 
+            paragraph.split(" ").forEach { word ->
+                if ((currentLine.length + word.length + 1) > maxChars) {
+                    lines.add(currentLine.trim())
+                    currentLine = word
+                } else {
+                    currentLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                }
+            }
+            if (currentLine.isNotEmpty()) lines.add(currentLine.trim())
+        }
+        lines.chunked(4)
+    }
+    
+    if (pages.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No response", color = rokidWhite)
+        }
+        return
+    }
+
+    LaunchedEffect(pages.size) {
+        scrollEvent.collectLatest { direction ->
+            currentPageIndex = (currentPageIndex + direction).coerceIn(0, pages.size - 1)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { onDone() }
+    ) {
+        // Main Text Area
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center)
+                .padding(horizontal = 40.dp, vertical = 60.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.Center
+        ) {
+            pages[currentPageIndex].forEach { line ->
+                Text(
+                    text = line,
+                    color = rokidWhite, // Use green as in screenshot
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 34.sp,
+                    textAlign = TextAlign.Start
+                )
+            }
+        }
+
+        // Right Scroll Bar
+        if (pages.size > 1) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(150.dp)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+                    .background(rokidWhite.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+            ) {
+                val barHeight = 150f / pages.size
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(barHeight.dp)
+                        .offset(y = (currentPageIndex * barHeight).dp)
+                        .background(rokidWhite, RoundedCornerShape(2.dp))
+                )
+            }
+        }
+
+        // Bottom Page Indicator (Green Bubble)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 40.dp)
+                .background(rokidWhite.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
+                .border(1.5.dp, rokidWhite.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "${currentPageIndex + 1}/${pages.size}",
+                color = rokidWhite,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -207,7 +348,6 @@ fun RecordingScreen(
                 interactionSource = remember { MutableInteractionSource() }
             ) { onDone() }
     ) {
-        // Bottom gradient for text background
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -248,24 +388,8 @@ fun RecordingScreen(
                     color = Color(0xFF64B5F6),
                     strokeWidth = 3.dp
                 )
-            } else {
-                Text(
-                    text = "Tap to dismiss",
-                    color = Color(0xFF64B5F6),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
-        
-        Text(
-            text = if (isListening) "Tap to finish" else "AI Assistant",
-            color = Color.White.copy(alpha = 0.3f),
-            fontSize = 12.sp,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 40.dp)
-        )
     }
 }
 
@@ -282,33 +406,10 @@ fun RecordingIndicator() {
         label = "rec_alpha"
     )
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .background(Color(0xFFF44336).copy(alpha = alpha), RoundedCornerShape(50))
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = "RECORDING",
-            color = Color.White.copy(alpha = 0.9f),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-    }
-}
-
-@Composable
-fun AppVersionDisplay(modifier: Modifier = Modifier) {
-    Text(
-        text = "v${BuildConfig.VERSION_NAME}",
-        color = Color.White.copy(alpha = 0.4f),
-        fontSize = 10.sp,
-        modifier = modifier
+    Box(
+        modifier = Modifier
+            .size(12.dp)
+            .background(Color.Red.copy(alpha = alpha), RoundedCornerShape(6.dp))
     )
 }
 
@@ -323,43 +424,64 @@ fun ConnectionScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { onScreenTap() }
+            .clickable { onScreenTap() },
+        contentAlignment = Alignment.Center
     ) {
-        StatusIndicator(
-            isConnected = uiState.isConnected,
-            isListening = uiState.isListening,
-            deviceName = uiState.connectedDeviceName,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-        )
-
-        MainDisplayArea(
-            displayText = uiState.displayText,
-            isProcessing = uiState.isProcessing,
-            modifier = Modifier.align(Alignment.Center)
-        )
-
-        HintText(
-            hint = uiState.hintText,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = uiState.displayText,
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = uiState.hintText,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 16.sp
+            )
+        }
 
         if (showDeviceSelector) {
             DeviceSelectorDialog(
                 devices = uiState.availableDevices,
-                cxrConnectedPhoneName = uiState.cxrConnectedPhoneName,
                 onDeviceSelected = onDeviceSelected,
                 onDismiss = onDismissDeviceSelector
             )
         }
     }
+}
+
+@Composable
+fun DeviceSelectorDialog(
+    devices: List<BluetoothDevice>,
+    onDeviceSelected: (BluetoothDevice) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Phone to Connect") },
+        text = {
+            Column {
+                if (devices.isEmpty()) {
+                    Text("No paired devices found. Please pair in Settings.")
+                } else {
+                    devices.forEach { device ->
+                        @Suppress("MissingPermission")
+                        TextButton(
+                            onClick = { onDeviceSelected(device) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(device.name ?: "Unknown Device")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
@@ -370,7 +492,6 @@ fun TranslateMainScreenContent(
     displayText: String,
     hintText: String,
     connectedDeviceName: String?,
-    cxrConnectedPhoneName: String?,
     availableDevices: List<BluetoothDevice>,
     showDeviceSelector: Boolean,
     onScreenTap: () -> Unit,
@@ -380,38 +501,67 @@ fun TranslateMainScreenContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) { onScreenTap() }
     ) {
-        StatusIndicator(
+        Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            isConnected = isConnected,
-            isListening = isListening,
-            deviceName = connectedDeviceName
-        )
+                .align(Alignment.Center)
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = displayText,
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = hintText,
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center
+            )
+            
+            if (isProcessing) {
+                Spacer(modifier = Modifier.height(32.dp))
+                CircularProgressIndicator(color = Color(0xFF00FF00))
+            }
+        }
 
-        MainDisplayArea(
-            modifier = Modifier.align(Alignment.Center),
-            displayText = displayText,
-            isProcessing = isProcessing
-        )
-
-        HintText(
+        Row(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
-            hint = hintText
-        )
-
+                .align(Alignment.TopCenter)
+                .padding(top = 40.dp)
+                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        if (isConnected) Color(0xFF00FF00) else Color.Red,
+                        RoundedCornerShape(4.dp)
+                    )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (isConnected) "Connected: ${connectedDeviceName ?: "Phone"}" else "Disconnected",
+                color = Color.White,
+                fontSize = 12.sp
+            )
+        }
+        
         if (showDeviceSelector) {
             DeviceSelectorDialog(
                 devices = availableDevices,
-                cxrConnectedPhoneName = cxrConnectedPhoneName,
                 onDeviceSelected = onDeviceSelected,
                 onDismiss = onDismissSelector
             )
@@ -420,197 +570,40 @@ fun TranslateMainScreenContent(
 }
 
 @Composable
-fun StatusIndicator(
-    modifier: Modifier = Modifier,
-    isConnected: Boolean,
-    isListening: Boolean,
-    deviceName: String? = null
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            StatusDot(
-                color = if (isConnected) Color(0xFF64B5F6) else Color(0xFFFF5722),
-                label = if (isConnected) "Connected" else "Disconnected"
-            )
-
-            AnimatedVisibility(
-                visible = isListening,
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut()
-            ) {
-                StatusDot(
-                    color = Color(0xFFF44336),
-                    label = "Recording"
-                )
-            }
-        }
-
-        if (isConnected && deviceName != null) {
-            Text(
-                text = deviceName,
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 10.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun StatusDot(color: Color, label: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(color, shape = RoundedCornerShape(50))
-        )
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.8f),
-            fontSize = 12.sp
-        )
-    }
-}
-
-@Composable
-fun MainDisplayArea(
-    modifier: Modifier = Modifier,
-    displayText: String,
-    isProcessing: Boolean
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (isProcessing) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(32.dp),
-                color = Color(0xFF64B5F6),
-                strokeWidth = 3.dp
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        Text(
-            text = displayText,
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            lineHeight = 32.sp,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-fun HintText(
-    modifier: Modifier = Modifier,
-    hint: String
-) {
+fun AppVersionDisplay(modifier: Modifier = Modifier) {
     Text(
-        text = hint,
-        color = Color.White.copy(alpha = 0.5f),
-        fontSize = 14.sp,
-        textAlign = TextAlign.Center,
+        text = "v1.0.4",
+        color = Color.White.copy(alpha = 0.3f),
+        fontSize = 12.sp,
         modifier = modifier
     )
 }
-
-@Composable
-fun DeviceSelectorDialog(
-    devices: List<BluetoothDevice>,
-    cxrConnectedPhoneName: String? = null,
-    onDeviceSelected: (BluetoothDevice) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val sortedDevices = remember(devices, cxrConnectedPhoneName) {
-        if (cxrConnectedPhoneName != null) {
-            devices.sortedByDescending {
-                @Suppress("MissingPermission")
-                it.name?.equals(cxrConnectedPhoneName, ignoreCase = true) == true
-            }
-        } else {
-            devices
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1A1A1A),
-        title = { Text(text = "Select Device", color = Color.White) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (sortedDevices.isEmpty()) {
-                    Text(text = "No paired devices", color = Color.Gray)
-                }
-                sortedDevices.forEach { device ->
-                    @Suppress("MissingPermission")
-                    val name = device.name ?: "Unknown"
-                    val isRecommended = cxrConnectedPhoneName != null &&
-                            name.equals(cxrConnectedPhoneName, ignoreCase = true)
-
-                    Button(
-                        onClick = { onDeviceSelected(device) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isRecommended) Color(0xFF1E3A5F) else Color(0xFF2A2A2A)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = name, color = Color.White)
-                            if (isRecommended) {
-                                Text(
-                                    text = "★ Recommended",
-                                    color = Color(0xFF64B5F6),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color(0xFF64B5F6))
-            }
-        }
-    )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  PREVIEWS
-// ═══════════════════════════════════════════════════════════════════════════
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-fun PreviewTranslateMainScreen() {
+fun ResponseScreenPreview() {
+    RokidGlassesTheme {
+        ResponseScreen(
+            uiState = GlassesUIState(
+                aiResponse = "Technological evolution and future of AI glasses.\n\n1. The Convergence of Miniaturization and Intelligence"
+            ),
+            scrollEvent = emptyFlow(),
+            onDone = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun MainScreenPreview() {
     RokidGlassesTheme {
         TranslateMainScreenContent(
             isConnected = true,
             isListening = false,
             isProcessing = false,
-            displayText = "Tap to record",
-            hintText = "Tap right of glasses",
-            connectedDeviceName = "My Phone",
-            cxrConnectedPhoneName = "My Phone",
+            displayText = "Connected",
+            hintText = "Tap to record",
+            connectedDeviceName = "Rokid Phone",
             availableDevices = emptyList(),
             showDeviceSelector = false,
             onScreenTap = {},
@@ -622,28 +615,10 @@ fun PreviewTranslateMainScreen() {
 
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-fun PreviewConnectionScreen() {
-    RokidGlassesTheme {
-        ConnectionScreen(
-            uiState = GlassesUIState(
-                isConnected = false,
-                displayText = "Not connected",
-                hintText = "Tap to connect"
-            ),
-            onScreenTap = {},
-            onDeviceSelected = {},
-            showDeviceSelector = false,
-            onDismissDeviceSelector = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
-@Composable
-fun PreviewRecordingScreen() {
+fun RecordingScreenPreview() {
     RokidGlassesTheme {
         RecordingScreen(
-            displayText = "Testing recording UI...",
+            displayText = "Listening...",
             isListening = true,
             isProcessing = false,
             onDone = {}

@@ -4,8 +4,10 @@ import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -20,15 +22,15 @@ import com.fxMedia.rokidcommon.protocol.ConnectionState
 import com.fxMedia.rokidcommon.protocol.Message
 import com.fxMedia.rokidcommon.protocol.MessageType
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 
 sealed class AppScreen {
     object Main : AppScreen()
     object Recording : AppScreen()
+    object Response : AppScreen()
 }
 
 data class GlassesUIState(
@@ -61,16 +63,22 @@ class GlassesViewModel(
     private val _appScreen = MutableStateFlow<AppScreen>(AppScreen.Main)
     val appScreen: StateFlow<AppScreen> = _appScreen.asStateFlow()
 
+    private val _scrollEvent = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val scrollEvent = _scrollEvent.asSharedFlow()
+
     private val bluetoothClient = BluetoothSppClient(context, viewModelScope)
     private var cxrServiceManager: CxrServiceManager? = null
 
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
     private val audioBuffer = ByteArrayOutputStream()
+    
+    private var mediaPlayer: MediaPlayer? = null
 
     init {
         initializeBluetooth()
         initializeCxrService()
+
     }
 
     /**
@@ -81,6 +89,9 @@ class GlassesViewModel(
      */
     fun onPrimaryTap() {
         val currentState = _uiState.value
+        
+        // Stop any ongoing TTS playback when user interacts
+        stopPlayback()
         
         if (!currentState.isConnected) {
             refreshPairedDevices()
@@ -99,6 +110,14 @@ class GlassesViewModel(
                 _uiState.update { it.copy(displayText = "Tap to start", hintText = "Ready") }
             }
         }
+    }
+
+    fun onNavigateUp() {
+        viewModelScope.launch { _scrollEvent.emit(-1) }
+    }
+
+    fun onNavigateDown() {
+        viewModelScope.launch { _scrollEvent.emit(1) }
     }
 
     fun startRecording() {
@@ -286,6 +305,7 @@ class GlassesViewModel(
             }
             MessageType.AI_RESPONSE_TEXT -> {
                 // Response back from API via Phone
+                _appScreen.value = AppScreen.Response
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
@@ -293,6 +313,12 @@ class GlassesViewModel(
                         displayText = message.payload ?: "No response",
                         hintText = "Tap to record again"
                     )
+                }
+            }
+            MessageType.AI_RESPONSE_TTS -> {
+                message.binaryData?.let { audioData ->
+                    Log.d(TAG, "Received TTS audio data: ${audioData.size} bytes")
+                    playTtsAudio(audioData)
                 }
             }
             MessageType.AI_ERROR -> {
@@ -311,6 +337,59 @@ class GlassesViewModel(
             }
             else -> {}
         }
+    }
+    
+    private fun playTtsAudio(audioData: ByteArray) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Create a temporary file to play the audio
+                val tempFile = File(context.cacheDir, "tts_response.mp3")
+                FileOutputStream(tempFile).use { it.write(audioData) }
+                
+                withContext(Dispatchers.Main) {
+                    stopPlayback()
+                    
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(tempFile.absolutePath)
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                .build()
+                        )
+                        setOnPreparedListener { start() }
+                        setOnCompletionListener {
+                            it.release()
+                            if (mediaPlayer == it) mediaPlayer = null
+                            tempFile.delete()
+                        }
+                        setOnErrorListener { mp, _, _ ->
+                            mp.release()
+                            if (mediaPlayer == mp) mediaPlayer = null
+                            tempFile.delete()
+                            true
+                        }
+                        prepareAsync()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error playing TTS audio", e)
+            }
+        }
+    }
+    
+    private fun stopPlayback() {
+        try {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+                it.release()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping playback", e)
+        }
+        mediaPlayer = null
     }
 
     private fun initializeCxrService() {
@@ -361,10 +440,15 @@ class GlassesViewModel(
                         isConnected = isConnected,
                         displayText = when (state) {
                             BluetoothClientState.DISCONNECTED -> "Not connected"
-                            BluetoothClientState.CONNECTING -> "Connecting..."
+                            BluetoothClientState.CONNECTING -> "Waiting for device..." // "Waiting for device" as you suggested
                             BluetoothClientState.CONNECTED -> "Connected"
                         },
-                        hintText = if (isConnected) "Tap to record" else "Tap to connect"
+                        // FIX: Check for CONNECTING state here
+                        hintText = when (state) {
+                            BluetoothClientState.CONNECTED -> "Tap to record"
+                            BluetoothClientState.CONNECTING -> "Connecting..."
+                            else -> "Tap to connect"
+                        }
                     )
                 }
             }
@@ -388,6 +472,7 @@ class GlassesViewModel(
         super.onCleared()
         recordingJob?.cancel()
         cleanupAudioRecord()
+        stopPlayback()
         bluetoothClient.disconnect()
         cxrServiceManager?.release()
     }

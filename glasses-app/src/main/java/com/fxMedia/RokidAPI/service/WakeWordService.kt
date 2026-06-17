@@ -141,6 +141,8 @@ class WakeWordService : Service() {
                     val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     
                     if (readCount > 0) {
+                        /* 
+                        // Current volume threshold system commented out for Picovoice integration
                         // Calculate volume (RMS)
                         val amplitude = calculateAmplitude(buffer, readCount)
                         
@@ -161,6 +163,7 @@ class WakeWordService : Service() {
                         } else if (amplitude < SILENCE_THRESHOLD) {
                             loudStartTime = 0L
                         }
+                        */
                     }
                     
                     delay(50) // Small delay to avoid excessive CPU usage

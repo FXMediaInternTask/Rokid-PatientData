@@ -4,9 +4,9 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.fxMedia.androidAPITest.R
 import com.fxMedia.rokidcommon.protocol.ConnectionState
 import com.fxMedia.rokidcommon.protocol.MessageType
-import com.fxMedia.androidAPITest.R
 import com.fxMedia.androidAPITest.api.RetrofitClient
 import com.fxMedia.androidAPITest.api.model.LoginRequest
 import com.fxMedia.androidAPITest.api.model.TestRequest
@@ -16,6 +16,7 @@ import com.fxMedia.androidAPITest.data.SettingsRepository
 import com.fxMedia.androidAPITest.service.BluetoothConnectionState
 import com.fxMedia.androidAPITest.service.BluetoothSppManager
 import com.fxMedia.androidAPITest.service.SpeechResult
+import com.fxMedia.androidAPITest.service.TextToSpeechService
 import com.fxMedia.androidAPITest.service.stt.SttCredentialsRepository
 import com.fxMedia.androidAPITest.service.stt.SttService
 import com.fxMedia.androidAPITest.service.stt.SttServiceFactory
@@ -24,6 +25,7 @@ import com.fxMedia.rokidcommon.protocol.Message
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,23 +57,22 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private val tokenManager = TokenManager(application)
     private val settingsRepository = SettingsRepository.getInstance(application)
     private val sttCredentialsRepository = SttCredentialsRepository.getInstance(application)
+
+    // Use the new TextToSpeechService
+    private val ttsService = TextToSpeechService(application)
     
     private var currentSessionId: String? = null
     private var sttService: SttService? = null
 
     init {
-        // Check if existing token is still valid
         validateExistingToken()
-        
-        // Load saved session ID from persistent storage
         currentSessionId = tokenManager.getSessionId()
 
-        // Observe Bluetooth connection status
         viewModelScope.launch {
             btManager.connectionState.collect { state ->
                 val connectionState = when (state) {
                     BluetoothConnectionState.DISCONNECTED -> ConnectionState.DISCONNECTED
-                    BluetoothConnectionState.LISTENING -> ConnectionState.DISCONNECTED
+                    BluetoothConnectionState.LISTENING -> ConnectionState.CONNECTING // Wait for incoming
                     BluetoothConnectionState.CONNECTING -> ConnectionState.CONNECTING
                     BluetoothConnectionState.CONNECTED -> ConnectionState.CONNECTED
                 }
@@ -79,14 +80,12 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Observe connected device name
         viewModelScope.launch {
             btManager.connectedDeviceName.collect { name ->
                 _uiState.update { it.copy(connectedGlassesName = name) }
             }
         }
 
-        // Initialize STT service when settings change
         viewModelScope.launch {
             settingsRepository.settingsFlow.collect { _ ->
                 updateSttService()
@@ -99,7 +98,6 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Handle incoming messages from glasses
         viewModelScope.launch {
             btManager.messageFlow.collect { message ->
                 when (message.type) {
@@ -117,14 +115,11 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                     MessageType.VOICE_START -> {
                         _uiState.update { it.copy(isRemoteRecording = true) }
                     }
-                    else -> {
-                        Log.d(TAG, "Received message type: ${message.type}")
-                    }
+                    else -> {}
                 }
             }
         }
 
-        // Load saved transcripts from disk
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val context = getApplication<Application>()
@@ -139,15 +134,23 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e(TAG, "Failed to load transcripts", e)
             }
         }
+        
+        // Auto-start listening on init so glasses can connect immediately
+        // Added a 1s delay to let the BT stack settle after app launch
+        viewModelScope.launch {
+            delay(1000)
+            if (btManager.isBluetoothEnabled()) {
+                Log.d(TAG, "Auto-starting Bluetooth listener")
+                btManager.startListening()
+            }
+        }
     }
 
     private fun updateSttService() {
         val settings = settingsRepository.getSettings()
         val sttCredentials = sttCredentialsRepository.getCredentials()
         sttService = SttServiceFactory.createService(sttCredentials, settings)
-        Log.d(TAG, "STT Service updated: ${sttService?.provider}")
-        
-        // Auto check Azure connection if it's the current provider
+
         if (sttService?.provider == com.fxMedia.androidAPITest.service.stt.SttProvider.AZURE_SPEECH) {
             checkAzureStatus()
         }
@@ -171,47 +174,150 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(isTranscribing = true) }
             updateTranscripts("Processing voice...")
             
-            val service = sttService
-            if (service == null) {
+            val service = sttService ?: run {
                 updateTranscripts("Error: STT service not configured")
                 _uiState.update { it.copy(isTranscribing = false) }
                 return@launch
             }
 
             try {
-                // Get speech language from settings
                 val language = settingsRepository.getSettings().speechLanguage.ifBlank { "en-US" }
-                
                 when (val result = service.transcribe(audioData, language)) {
                     is SpeechResult.Success -> {
-                        Log.d(TAG, "Transcription success: ${result.text}")
-                        
-                        // Send transcript back to glasses
                         btManager.sendMessage(Message(
                             type = MessageType.USER_TRANSCRIPT,
                             payload = result.text
                         ))
-                        
-                        // This will eventually call sendTestAnnotation which replaces "Processing voice..."
                         sendTestAnnotation(result.text)
                     }
                     is SpeechResult.Error -> {
-                        Log.e(TAG, "Transcription error: ${result.message}")
                         updateTranscripts("Transcription error: ${result.message}")
-                        
-                        btManager.sendMessage(Message(
-                            type = MessageType.AI_ERROR,
-                            payload = result.message
-                        ))
+                        btManager.sendMessage(Message(type = MessageType.AI_ERROR, payload = result.message))
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "STT processing failed", e)
                 updateTranscripts("STT failed: ${e.message}")
             } finally {
                 _uiState.update { it.copy(isTranscribing = false) }
             }
         }
+    }
+
+    fun sendTestAnnotation(text: String) {
+        viewModelScope.launch {
+            try {
+                updateTranscripts("You: $text")
+                updateTranscripts("Sending...")
+                
+                val savedToken = tokenManager.getToken() ?: run {
+                    updateTranscripts("Error: Not logged in")
+                    return@launch
+                }
+
+                val response = RetrofitClient.testInstance.sendTest(
+                    token = "Bearer $savedToken",
+                    request = TestRequest(message = text, sessionId = currentSessionId)
+                )
+                
+                currentSessionId = response.data?.sessionId
+                tokenManager.saveSessionId(currentSessionId)
+
+                val reply = response.data?.reply ?: "Empty reply from AI"
+                updateTranscripts("AI: $reply")
+
+                // Send text to glasses
+                btManager.sendMessage(Message(type = MessageType.AI_RESPONSE_TEXT, payload = reply))
+
+                // Trigger TTS: This prepares audio for glasses
+                ttsService.speak(reply) { audioData ->
+                    // This block runs when audio data is successfully synthesized
+                    viewModelScope.launch {
+                        btManager.sendMessage(Message(
+                            type = MessageType.AI_RESPONSE_TTS,
+                            binaryData = audioData
+                        ))
+                    }
+                }
+
+            } catch (e: Exception) {
+                updateTranscripts("Error: ${e.message}")
+                btManager.sendMessage(Message(type = MessageType.AI_ERROR, payload = e.message))
+            }
+        }
+    }
+
+    private fun validateExistingToken() {
+        val existingToken = tokenManager.getToken() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoginLoading = true) }
+            try {
+                val response = RetrofitClient.authService.validateToken(ValidateTokenRequest(token = existingToken))
+                if (response.status) {
+                    _uiState.update { it.copy(isLoggedIn = true) }
+                } else {
+                    tokenManager.deleteToken()
+                    _uiState.update { it.copy(isLoggedIn = false) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoggedIn = true) }
+            } finally {
+                _uiState.update { it.copy(isLoginLoading = false) }
+            }
+        }
+    }
+
+    fun performLogin() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoginLoading = true) }
+            try {
+                val response = RetrofitClient.authService.login(LoginRequest(username = "unity", password = "Unity@123"))
+                if (response.status && response.token != null) {
+                    tokenManager.saveToken(response.token)
+                    _uiState.update { it.copy(isLoggedIn = true) }
+                }
+            } catch (e: Exception) {
+                updateTranscripts("Login error: ${e.message}")
+            } finally {
+                _uiState.update { it.copy(isLoginLoading = false) }
+            }
+        }
+    }
+
+    private fun updateTranscripts(text: String) {
+        _uiState.update { state ->
+            val currentList = state.transcripts
+            val newList = when {
+                text == "Processing voice..." || text == "Sending..." -> (listOf(text) + currentList).take(50)
+                currentList.firstOrNull() == "Processing voice..." || currentList.firstOrNull() == "Sending..." -> listOf(text) + currentList.drop(1)
+                else -> (listOf(text) + currentList).take(50)
+            }
+            state.copy(transcripts = newList)
+        }
+        saveTranscripts()
+    }
+
+    private fun saveTranscripts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val file = File(context.filesDir, "transcripts.json")
+                file.writeText(Gson().toJson(_uiState.value.transcripts))
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun startScanning() = btManager.startListening()
+    fun disconnect() = btManager.disconnect(restartListening = false)
+    fun resetConversation() {
+        currentSessionId = null
+        tokenManager.deleteSessionId()
+        _uiState.update { it.copy(transcripts = emptyList()) }
+        saveTranscripts()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        ttsService.shutdown()
     }
 
     /**
@@ -225,9 +331,9 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 val inputStream = context.resources.openRawResource(R.raw.afternoon)
                 val audioData = inputStream.readBytes()
                 inputStream.close()
-                
+
                 Log.d(TAG, "Testing Azure STT with raw resource, size: ${audioData.size} bytes")
-                
+
                 // Switch to main to update UI through handleIncomingVoice
                 launch(Dispatchers.Main) {
                     handleIncomingVoice(audioData)
@@ -239,170 +345,5 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-    }
-
-    private fun validateExistingToken() {
-        val existingToken = tokenManager.getToken()
-        if (existingToken.isNullOrEmpty()) {
-            _uiState.update { it.copy(isLoggedIn = false) }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoginLoading = true) }
-            try {
-                val response = RetrofitClient.authService.validateToken(
-                    ValidateTokenRequest(token = existingToken)
-                )
-                if (response.status) {
-                    _uiState.update { it.copy(isLoggedIn = true) }
-                    Log.d(TAG, "Token validated successfully")
-                } else {
-                    // Token expired or invalid
-                    tokenManager.deleteToken()
-                    _uiState.update { it.copy(isLoggedIn = false) }
-                    updateTranscripts("Session expired. Please login again.")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Token validation failed", e)
-                // On error, we stay "logged in" for UI purposes but API calls might still fail
-                _uiState.update { it.copy(isLoggedIn = true) }
-            } finally {
-                _uiState.update { it.copy(isLoginLoading = false) }
-            }
-        }
-    }
-
-    /**
-     * Performs login with hardcoded credentials for testing.
-     */
-    fun performLogin(
-    ) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoginLoading = true) }
-            try {
-                // Hardcoded credentials for testing as requested
-                val response = RetrofitClient.authService.login(
-                    LoginRequest(username = "unity", password = "Unity@123")
-                )
-                
-                if (response.status && response.token != null) {
-                    tokenManager.saveToken(response.token)
-                    _uiState.update { it.copy(isLoggedIn = true) }
-                    updateTranscripts("Login successful")
-                } else {
-                    updateTranscripts("Login failed: ${if (!response.status) "Invalid credentials" else "No token received"}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Login error", e)
-                updateTranscripts("Login error: ${e.message}")
-            } finally {
-                _uiState.update { it.copy(isLoginLoading = false) }
-            }
-        }
-    }
-
-    fun sendTestAnnotation(text: String) {
-        viewModelScope.launch {
-            try {
-                // 1. Show user's input in the conversation
-                updateTranscripts("You: $text")
-                
-                // 2. Show "Sending..." status
-                updateTranscripts("Sending...")
-                
-                val savedToken = tokenManager.getToken()
-                
-                if (savedToken == null) {
-                    updateTranscripts("Error: Not logged in")
-                    return@launch
-                }
-
-                val response = RetrofitClient.testInstance.sendTest(
-                    token = "Bearer $savedToken",
-                    request = TestRequest(
-                        message = text,
-                        sessionId = currentSessionId
-                    )
-                )
-                
-                currentSessionId = response.data?.sessionId
-                // PERSIST SESSION ID
-                tokenManager.saveSessionId(currentSessionId)
-                
-                val reply = response.data?.reply ?: "Empty reply from AI"
-                
-                // 3. Update the conversation with the AI reply (replaces "Sending...")
-                updateTranscripts("AI: $reply")
-                
-                // Send response back to glasses
-                btManager.sendMessage(Message(
-                    type = MessageType.AI_RESPONSE_TEXT,
-                    payload = reply
-                ))
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "API Error", e)
-                updateTranscripts("Error: ${e.message}")
-                
-                btManager.sendMessage(Message(
-                    type = MessageType.AI_ERROR,
-                    payload = e.message
-                ))
-            }
-        }
-    }
-
-    private fun updateTranscripts(text: String) {
-        _uiState.update { state ->
-            val currentList = state.transcripts
-            
-            val newList = when {
-                // If we are adding a "loading" status, always prepend it
-                text == "Processing voice..." || text == "Sending..." -> {
-                    (listOf(text) + currentList).take(50)
-                }
-                // If the current top item is a "loading" status, replace it with the new message (actual result or "You:...")
-                currentList.firstOrNull() == "Processing voice..." || currentList.firstOrNull() == "Sending..." -> {
-                    listOf(text) + currentList.drop(1)
-                }
-                // Otherwise, just prepend the new message
-                else -> {
-                    (listOf(text) + currentList).take(50)
-                }
-            }
-
-            state.copy(transcripts = newList)
-        }
-        saveTranscripts()
-    }
-
-    private fun saveTranscripts() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val context = getApplication<Application>()
-                val file = File(context.filesDir, "transcripts.json")
-                val json = Gson().toJson(_uiState.value.transcripts)
-                file.writeText(json)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save transcripts", e)
-            }
-        }
-    }
-
-    fun startScanning() {
-        btManager.startListening()
-    }
-
-    fun disconnect() {
-        btManager.disconnect(restartListening = false)
-    }
-
-    fun resetConversation() {
-        currentSessionId = null
-        // DELETE FROM STORAGE
-        tokenManager.deleteSessionId()
-        _uiState.update { it.copy(transcripts = emptyList()) }
-        saveTranscripts()
     }
 }

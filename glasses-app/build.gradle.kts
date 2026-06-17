@@ -34,8 +34,8 @@ android {
         applicationId = "com.fxMedia.RokidAPI"
         minSdk = 28
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.3"
+        versionCode = 5
+        versionName = "0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -118,6 +118,8 @@ kotlin {
 
 // Note: Local AAR repository configured in settings.gradle.kts
 
+
+
 dependencies {
     // Common module
     implementation(project(":common"))
@@ -136,16 +138,16 @@ dependencies {
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    
+
     // Gson for JSON
     implementation("com.google.code.gson:gson:2.10.1")
-    
+
     // OkHttp for API calls
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    
+
     // Google AI (Gemini)
     implementation("com.google.ai.client.generativeai:generativeai:0.2.2")
-    
+
     // Bluetooth
     implementation("androidx.bluetooth:bluetooth:1.0.0-alpha02")
     
@@ -171,4 +173,9 @@ dependencies {
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.okhttp.mockwebserver)
+
+    //custom wake up
+    //implementation("ai.picovoice:porcupine-android:3.0.0")
+    //implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation(group = "com.alphacephei", name = "vosk-android", version = "0.3.32+")
 }

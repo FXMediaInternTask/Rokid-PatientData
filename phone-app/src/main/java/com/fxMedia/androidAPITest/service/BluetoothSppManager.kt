@@ -92,39 +92,64 @@ class BluetoothSppManager(
     fun isBluetoothEnabled(): Boolean {
         return bluetoothAdapter?.isEnabled == true
     }
-    
+
     fun startListening() {
         if (!hasBluetoothPermission()) return
         if (bluetoothAdapter == null) return
-        
+
         stopListening()
-        
-        acceptJob = scope.launch(Dispatchers.IO) {
+
+        acceptJob = scope.launch(Dispatchers.IO) @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) {
             while (isActive) {
                 try {
                     _connectionState.value = BluetoothConnectionState.LISTENING
-                    
-                    serverSocket = bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(
-                        SERVICE_NAME, APP_UUID
-                    )
-                    
+                    Log.d(TAG, "Starting Bluetooth server...")
+
+                    // Re-create the listener inside the loop for every attempt
+                    serverSocket = try {
+                        bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(
+                            SERVICE_NAME, APP_UUID
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Insecure socket failed, trying secure: ${e.message}")
+                        bluetoothAdapter.listenUsingRfcommWithServiceRecord(
+                            SERVICE_NAME, APP_UUID
+                        )
+                    }
+
+                    Log.d(TAG, "Waiting for connection...")
                     val socket = serverSocket?.accept()
+                    
                     if (socket != null) {
+                        Log.d(TAG, "Connection accepted from: ${socket.remoteDevice.name}")
                         handleConnection(socket)
+
+                        // Wait for this connection to finish
                         readJob?.join()
+                        
+                        Log.d(TAG, "Connection ended, waiting 1s before accepting new connections...")
                         delay(1000)
                     }
-                } catch (e: Exception) {
-                    if (_connectionState.value != BluetoothConnectionState.DISCONNECTED) {
+                } catch (e: IOException) {
+                    if (isActive) {
+                        Log.e(TAG, "Accept failed: ${e.message}")
                         delay(500)
                     } else {
                         break
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Unexpected error in accept loop", e)
+                    if (isActive) delay(1000) else break
                 } finally {
-                    try { serverSocket?.close() } catch (e: IOException) {}
+                    try {
+                        serverSocket?.close()
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Error closing server socket: ${e.message}")
+                    }
                     serverSocket = null
                 }
             }
+            _connectionState.value = BluetoothConnectionState.DISCONNECTED
         }
     }
     
@@ -219,6 +244,7 @@ class BluetoothSppManager(
                 outputStream?.flush()
                 true
             } catch (e: IOException) {
+                Log.e(TAG, "Send failed", e)
                 disconnect()
                 false
             }
@@ -280,11 +306,14 @@ class BluetoothSppManager(
         
         if (restartListening) {
             scope.launch(Dispatchers.IO) {
-                delay(500)
-                stopListening()
-                delay(200)
-                startListening()
-                synchronized(disconnectLock) { isDisconnecting = false }
+                try {
+                    delay(500)
+                    stopListening()
+                    delay(200)
+                    startListening()
+                } finally {
+                    synchronized(disconnectLock) { isDisconnecting = false }
+                }
             }
         } else {
             synchronized(disconnectLock) { isDisconnecting = false }

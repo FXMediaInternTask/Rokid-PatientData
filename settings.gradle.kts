@@ -27,7 +27,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RokidAIAssistant"
+rootProject.name = "RokidChatbot"
 
 // Original integrated version of the app (for development and testing purposes)
 include(":app")

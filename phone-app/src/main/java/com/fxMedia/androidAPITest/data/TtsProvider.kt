@@ -24,6 +24,10 @@ enum class TtsProvider(
     GOOGLE_TRANSLATE_TTS(
         displayNameResId = R.string.tts_provider_google_translate,
         descriptionResId = R.string.tts_provider_google_translate_desc
+    ),
+    ELEVENLABS(
+        displayNameResId = R.string.tts_provider_elevenlabs,
+        descriptionResId = R.string.tts_provider_elevenlabs_desc
     );
 
     companion object {

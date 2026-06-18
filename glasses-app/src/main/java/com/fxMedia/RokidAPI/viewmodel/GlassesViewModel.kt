@@ -74,6 +74,7 @@ class GlassesViewModel(
     private val audioBuffer = ByteArrayOutputStream()
     
     private var mediaPlayer: MediaPlayer? = null
+    private var pendingTtsAudio: ByteArray? = null
 
     init {
         initializeBluetooth()
@@ -149,6 +150,7 @@ class GlassesViewModel(
 
         _appScreen.value = AppScreen.Recording
         audioBuffer.reset()
+        pendingTtsAudio = null // Clear any old audio buffer when starting new record
 
         _uiState.update {
             it.copy(
@@ -305,20 +307,30 @@ class GlassesViewModel(
             }
             MessageType.AI_RESPONSE_TEXT -> {
                 // Response back from API via Phone
+                val text = message.payload ?: ""
+                Log.d(TAG, "Received AI Response Text. Triggering UI and Pending TTS.")
+                
                 _appScreen.value = AppScreen.Response
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
-                        aiResponse = message.payload ?: "",
-                        displayText = message.payload ?: "No response",
+                        aiResponse = text,
+                        displayText = text,
                         hintText = "Tap to record again"
                     )
+                }
+
+                // Synchronization: Play audio only after text UI is ready
+                pendingTtsAudio?.let { audioData ->
+                    Log.d(TAG, "Playing buffered TTS audio (${audioData.size} bytes)")
+                    playTtsAudio(audioData)
+                    pendingTtsAudio = null
                 }
             }
             MessageType.AI_RESPONSE_TTS -> {
                 message.binaryData?.let { audioData ->
-                    Log.d(TAG, "Received TTS audio data: ${audioData.size} bytes")
-                    playTtsAudio(audioData)
+                    Log.d(TAG, "Received TTS audio data: ${audioData.size} bytes. Buffering until Text arrives.")
+                    pendingTtsAudio = audioData
                 }
             }
             MessageType.AI_ERROR -> {

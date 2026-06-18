@@ -817,12 +817,20 @@ data class ApiSettings(
     val systemPrompt: String = "",
     
     // TTS settings
-    val ttsProvider: TtsProvider = TtsProvider.EDGE_TTS,
+    val ttsProvider: TtsProvider = TtsProvider.ELEVENLABS,
     val ttsVoiceOverride: String = "",
     val ttsSpeechRate: Float = 1.0f,
     val ttsPitch: Float = 0.0f,
     val systemTtsSpeechRate: Float = 1.0f,
     val systemTtsPitch: Float = 1.0f,
+    
+    // ElevenLabs TTS settings
+    val elevenlabsApiKey: String = "48e5ae70030a08440222fae149ad96d79ddb4c2063e96e403e59e88b56e75215",
+    val elevenlabsVoiceId: String = "ljEOxtzNoGEa58anWyea",
+    val elevenlabsStability: Float = 0.5f,
+    val elevenlabsSimilarityBoost: Float = 0.75f,
+    val elevenlabsSpeed: Float = 0.8f,
+    val elevenlabsModelId: String = "eleven_multilingual_v2",
 
     // Recording settings
     // Auto-analyze recordings with AI after stopping (default: true)
@@ -962,6 +970,7 @@ data class ApiSettings(
                (baiduApiKey.isNotBlank() && baiduSecretKey.isNotBlank()) ||
                perplexityApiKey.isNotBlank() ||
                moonshotApiKey.isNotBlank() ||
+               elevenlabsApiKey.isNotBlank() ||
                (customApiKey.isNotBlank() || customBaseUrl.isNotBlank())
     }
     

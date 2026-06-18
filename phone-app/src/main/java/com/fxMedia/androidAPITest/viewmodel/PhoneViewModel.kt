@@ -223,19 +223,29 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 tokenManager.saveSessionId(currentSessionId)
 
                 val reply = response.data?.reply ?: "Empty reply from AI"
-                updateTranscripts("AI: $reply")
-
-                // Send text to glasses
-                btManager.sendMessage(Message(type = MessageType.AI_RESPONSE_TEXT, payload = reply))
-
-                // Trigger TTS: This prepares audio for glasses
+                
+                // Trigger TTS: This prepares audio for glasses and phone
+                // We wait for the audio to be generated before showing text/playing
                 ttsService.speak(reply) { audioData ->
-                    // This block runs when audio data is successfully synthesized
+                    // This block runs when audio data is successfully synthesized (from ElevenLabs or Fallback)
                     viewModelScope.launch {
+                        // 1. Send Audio to glasses first (largest payload)
+                        if (audioData.isNotEmpty()) {
+                            btManager.sendMessage(Message(
+                                type = MessageType.AI_RESPONSE_TTS,
+                                binaryData = audioData
+                            ))
+                        }
+                        
+                        // 2. Send Text to glasses
                         btManager.sendMessage(Message(
-                            type = MessageType.AI_RESPONSE_TTS,
-                            binaryData = audioData
+                            type = MessageType.AI_RESPONSE_TEXT, 
+                            payload = reply
                         ))
+                        
+                        // 3. Update Phone UI and trigger local playback
+                        // Note: TextToSpeechService already handles local playback inside speak()
+                        updateTranscripts("AI: $reply")
                     }
                 }
 

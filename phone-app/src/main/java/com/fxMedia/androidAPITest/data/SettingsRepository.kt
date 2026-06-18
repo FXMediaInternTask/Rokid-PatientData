@@ -59,6 +59,14 @@ class SettingsRepository(private val context: Context) {
         private const val KEY_TTS_PITCH = "tts_pitch"
         private const val KEY_SYSTEM_TTS_SPEECH_RATE = "system_tts_speech_rate"
         private const val KEY_SYSTEM_TTS_PITCH = "system_tts_pitch"
+        
+        // Keys for ElevenLabs settings
+        private const val KEY_ELEVENLABS_API_KEY = "elevenlabs_api_key"
+        private const val KEY_ELEVENLABS_VOICE_ID = "elevenlabs_voice_id"
+        private const val KEY_ELEVENLABS_STABILITY = "elevenlabs_stability"
+        private const val KEY_ELEVENLABS_SIMILARITY_BOOST = "elevenlabs_similarity_boost"
+        private const val KEY_ELEVENLABS_SPEED = "elevenlabs_speed"
+        private const val KEY_ELEVENLABS_MODEL_ID = "elevenlabs_model_id"
 
         // Keys for LLM parameters
         private const val KEY_TEMPERATURE = "llm_temperature"
@@ -159,13 +167,22 @@ class SettingsRepository(private val context: Context) {
             ) ?: Locale.getDefault().toLanguageTag(),
             systemPrompt = systemPrompt,
             ttsProvider = TtsProvider.fromName(
-                prefs.getString(KEY_TTS_PROVIDER, TtsProvider.EDGE_TTS.name) ?: TtsProvider.EDGE_TTS.name
+                prefs.getString(KEY_TTS_PROVIDER, TtsProvider.ELEVENLABS.name) ?: TtsProvider.ELEVENLABS.name
             ),
             ttsVoiceOverride = prefs.getString(KEY_TTS_VOICE_OVER_RIDE, "") ?: "",
             ttsSpeechRate = prefs.getFloat(KEY_TTS_SPEECH_RATE, 1.0f),
             ttsPitch = prefs.getFloat(KEY_TTS_PITCH, 0.0f),
             systemTtsSpeechRate = prefs.getFloat(KEY_SYSTEM_TTS_SPEECH_RATE, 1.0f),
             systemTtsPitch = prefs.getFloat(KEY_SYSTEM_TTS_PITCH, 1.0f),
+            elevenlabsApiKey = prefs.getString(KEY_ELEVENLABS_API_KEY, "48e5ae70030a08440222fae149ad96d79ddb4c2063e96e403e59e88b56e75215") 
+                ?: "48e5ae70030a08440222fae149ad96d79ddb4c2063e96e403e59e88b56e75215",
+            elevenlabsVoiceId = prefs.getString(KEY_ELEVENLABS_VOICE_ID, "ljEOxtzNoGEa58anWyea") 
+                ?: "ljEOxtzNoGEa58anWyea",
+            elevenlabsStability = prefs.getFloat(KEY_ELEVENLABS_STABILITY, 0.5f),
+            elevenlabsSimilarityBoost = prefs.getFloat(KEY_ELEVENLABS_SIMILARITY_BOOST, 0.75f),
+            elevenlabsSpeed = prefs.getFloat(KEY_ELEVENLABS_SPEED, 0.8f),
+            elevenlabsModelId = prefs.getString(KEY_ELEVENLABS_MODEL_ID, "eleven_multilingual_v2") 
+                ?: "eleven_multilingual_v2",
             autoAnalyzeRecordings = prefs.getBoolean(KEY_AUTO_ANALYZE_RECORDINGS, true),
             pushChatToGlasses = prefs.getBoolean(KEY_PUSH_CHAT_TO_GLASSES, true),
             pushRecordingToGlasses = prefs.getBoolean(KEY_PUSH_RECORDING_TO_GLASSES, true),
@@ -235,6 +252,12 @@ class SettingsRepository(private val context: Context) {
             putFloat(KEY_TTS_PITCH, settings.ttsPitch)
             putFloat(KEY_SYSTEM_TTS_SPEECH_RATE, settings.systemTtsSpeechRate)
             putFloat(KEY_SYSTEM_TTS_PITCH, settings.systemTtsPitch)
+            putString(KEY_ELEVENLABS_API_KEY, settings.elevenlabsApiKey)
+            putString(KEY_ELEVENLABS_VOICE_ID, settings.elevenlabsVoiceId)
+            putFloat(KEY_ELEVENLABS_STABILITY, settings.elevenlabsStability)
+            putFloat(KEY_ELEVENLABS_SIMILARITY_BOOST, settings.elevenlabsSimilarityBoost)
+            putFloat(KEY_ELEVENLABS_SPEED, settings.elevenlabsSpeed)
+            putString(KEY_ELEVENLABS_MODEL_ID, settings.elevenlabsModelId)
             putBoolean(KEY_AUTO_ANALYZE_RECORDINGS, settings.autoAnalyzeRecordings)
             putBoolean(KEY_PUSH_CHAT_TO_GLASSES, settings.pushChatToGlasses)
             putBoolean(KEY_PUSH_RECORDING_TO_GLASSES, settings.pushRecordingToGlasses)
@@ -321,6 +344,14 @@ class SettingsRepository(private val context: Context) {
     
     fun updateCustomModelName(modelName: String) {
         saveSettings(getSettings().copy(customModelName = modelName))
+    }
+    
+    fun updateElevenlabsApiKey(apiKey: String) {
+        saveSettings(getSettings().copy(elevenlabsApiKey = apiKey))
+    }
+    
+    fun updateElevenlabsVoiceId(voiceId: String) {
+        saveSettings(getSettings().copy(elevenlabsVoiceId = voiceId))
     }
     
     fun updateSttProvider(provider: SttProvider) {

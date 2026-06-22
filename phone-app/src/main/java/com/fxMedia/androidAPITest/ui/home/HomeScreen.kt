@@ -26,6 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.fxMedia.rokidcommon.protocol.ConnectionState
 import com.fxMedia.androidAPITest.ui.theme.RokidPhoneTheme
 
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
+import com.fxMedia.androidAPITest.viewmodel.MicSource
+
 @Composable
 fun HomeScreen(
     transcripts: List<String>,
@@ -34,6 +39,10 @@ fun HomeScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onSendAnnotation: (String) -> Unit,
+    micSource: MicSource = MicSource.PHONE,
+    onToggleMic: () -> Unit = {},
+    isLiveActive: Boolean = false,
+    onToggleLive: () -> Unit = {},
     isLoggedIn: Boolean = false,
     isLoginLoading: Boolean = false,
     onLogin: () -> Unit = {},
@@ -50,6 +59,10 @@ fun HomeScreen(
         connectedGlassesName = connectedGlassesName,
         onConnect = onConnect,
         onDisconnect = onDisconnect,
+        micSource = micSource,
+        onToggleMic = onToggleMic,
+        isLiveActive = isLiveActive,
+        onToggleLive = onToggleLive,
         isLoggedIn = isLoggedIn,
         isLoginLoading = isLoginLoading,
         onLogin = onLogin,
@@ -69,6 +82,10 @@ fun HomeScreenContent(
     connectedGlassesName: String? = null,
     onConnect: () -> Unit = {},
     onDisconnect: () -> Unit = {},
+    micSource: MicSource = MicSource.PHONE,
+    onToggleMic: () -> Unit = {},
+    isLiveActive: Boolean = false,
+    onToggleLive: () -> Unit = {},
     isLoggedIn: Boolean = false,
     isLoginLoading: Boolean = false,
     onLogin: () -> Unit = {},
@@ -85,12 +102,18 @@ fun HomeScreenContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Simple Title
-        Text(
-            text = "Rokid Assistant",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Rokid Assistant",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
 
         // Connection Status
         ConnectionStatusCard(
@@ -98,6 +121,15 @@ fun HomeScreenContent(
             deviceName = connectedGlassesName,
             onConnect = onConnect,
             onDisconnect = onDisconnect
+        )
+
+        // Mic Selection Card
+        MicSelectionCard(
+            currentSource = micSource,
+            onToggle = onToggleMic,
+            isGlassesConnected = connectionState == ConnectionState.CONNECTED,
+            isLiveActive = isLiveActive,
+            onToggleLive = onToggleLive
         )
 
         // API Login Card
@@ -381,6 +413,116 @@ private fun ManualAnnotationCard(onSend: (String) -> Unit) {
                 },
                 textStyle = MaterialTheme.typography.bodyMedium
             )
+        }
+    }
+}
+
+@Composable
+private fun MicSelectionCard(
+    currentSource: MicSource,
+    onToggle: () -> Unit,
+    isGlassesConnected: Boolean,
+    isLiveActive: Boolean,
+    onToggleLive: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // First Row: Microphone Selection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Microphone Source",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = if (currentSource == MicSource.GLASSES) Color(0xFF81C784) else Color(0xFF88B0C4),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (currentSource == MicSource.GLASSES) "Rokid Glasses Mic" else "Phone Mic",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onToggle,
+                    enabled = isGlassesConnected || currentSource == MicSource.GLASSES,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF88B0C4)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Switch", fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Second Row: ElevenLabs Live Session
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ElevenLabs Live Session",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Wifi,
+                            contentDescription = null,
+                            tint = if (isLiveActive) Color(0xFFE57373) else Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isLiveActive) "Live Session Active" else "Session Inactive",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isLiveActive) Color(0xFFE57373) else Color.White
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onToggleLive,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isLiveActive) Color.Red.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(
+                        text = if (isLiveActive) "Stop Live" else "Start Live",
+                        fontSize = 12.sp,
+                        color = if (isLiveActive) Color.White else Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
         }
     }
 }

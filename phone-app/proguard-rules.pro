@@ -89,6 +89,11 @@
 # ── Coil ──────────────────────────────────────────────────────────────────────
 -dontwarn coil.**
 
+# ── ElevenLabs SDK ────────────────────────────────────────────────────────────
+-keep class io.elevenlabs.** { *; }
+-keep class io.livekit.** { *; }
+-keepattributes *Annotation*
+
 # ── General ───────────────────────────────────────────────────────────────────
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

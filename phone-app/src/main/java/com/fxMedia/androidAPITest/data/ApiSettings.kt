@@ -831,6 +831,7 @@ data class ApiSettings(
     val elevenlabsSimilarityBoost: Float = 0.75f,
     val elevenlabsSpeed: Float = 0.8f,
     val elevenlabsModelId: String = "eleven_multilingual_v2",
+    val elevenlabsAgentId: String = "agent_4501kvf235g0fd098w9ys6nddahn", // Default Agent ID
 
     // Recording settings
     // Auto-analyze recordings with AI after stopping (default: true)

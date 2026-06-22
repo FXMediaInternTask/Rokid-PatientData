@@ -22,6 +22,7 @@ dependencyResolutionManagement {
         maven { url = uri("https://maven.rokid.com/repository/maven-public/") }
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
         // Alibaba Cloud Mirror (Accelerated)
         maven { url = uri("https://maven.aliyun.com/repository/google") }
     }

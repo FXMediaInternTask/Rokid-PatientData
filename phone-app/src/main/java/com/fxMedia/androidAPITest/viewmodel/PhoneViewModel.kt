@@ -35,6 +35,11 @@ import java.io.File
 
 private const val TAG = "PhoneViewModel"
 
+enum class MicSource {
+    PHONE,
+    GLASSES
+}
+
 data class PhoneUiState(
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val bluetoothState: BluetoothConnectionState = BluetoothConnectionState.DISCONNECTED,
@@ -45,7 +50,9 @@ data class PhoneUiState(
     val isTranscribing: Boolean = false,
     val isAzureValid: Boolean = false,
     val isAzureChecking: Boolean = false,
-    val isRemoteRecording: Boolean = false
+    val isRemoteRecording: Boolean = false,
+    val micSource: MicSource = MicSource.PHONE,
+    val isElevenLabsLiveActive: Boolean = false
 )
 
 class PhoneViewModel(application: Application) : AndroidViewModel(application) {
@@ -54,6 +61,8 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<PhoneUiState> = _uiState.asStateFlow()
 
     private val btManager = BluetoothSppManager(application, viewModelScope)
+    private val cxrManager = com.fxMedia.androidAPITest.service.cxr.CxrMobileManager(application)
+    private val elevenLabsLiveService = com.fxMedia.androidAPITest.service.ai.ElevenLabsLiveService(application)
     private val tokenManager = TokenManager(application)
     private val settingsRepository = SettingsRepository.getInstance(application)
     private val sttCredentialsRepository = SttCredentialsRepository.getInstance(application)
@@ -323,6 +332,45 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         tokenManager.deleteSessionId()
         _uiState.update { it.copy(transcripts = emptyList()) }
         saveTranscripts()
+    }
+
+    fun toggleMicSource() {
+        val newSource = if (_uiState.value.micSource == MicSource.PHONE) {
+            MicSource.GLASSES
+        } else {
+            MicSource.PHONE
+        }
+        
+        _uiState.update { it.copy(micSource = newSource) }
+        
+        if (newSource == MicSource.GLASSES) {
+            Log.d(TAG, "Switching to Glasses Mic")
+            cxrManager.startRemoteMicStreaming { audioData ->
+                // This data comes from glasses. 
+                // If ElevenLabs Live is active, we might need a way to feed it.
+                // For now, it's captured and logged.
+                Log.v(TAG, "Received ${audioData.size} bytes from Glasses mic")
+            }
+        } else {
+            Log.d(TAG, "Switching to Phone Mic")
+            cxrManager.stopRemoteMicStreaming()
+        }
+    }
+
+    fun toggleElevenLabsLive() {
+        val isActive = _uiState.value.isElevenLabsLiveActive
+        if (isActive) {
+            elevenLabsLiveService.endSession()
+            _uiState.update { it.copy(isElevenLabsLiveActive = false) }
+        } else {
+            val settings = settingsRepository.getSettings()
+            if (settings.elevenlabsAgentId.isNotBlank()) {
+                elevenLabsLiveService.startSession(settings.elevenlabsAgentId)
+                _uiState.update { it.copy(isElevenLabsLiveActive = true) }
+            } else {
+                updateTranscripts("Error: ElevenLabs Agent ID not configured")
+            }
+        }
     }
 
     override fun onCleared() {

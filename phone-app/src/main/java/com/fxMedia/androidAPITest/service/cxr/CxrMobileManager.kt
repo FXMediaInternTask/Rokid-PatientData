@@ -480,7 +480,49 @@ class CxrMobileManager(private val context: Context) {
             callback(null, null)
         }
     }
-    
+
+    /**
+     * Remote Microphone Streaming
+     */
+    fun startRemoteMicStreaming(onAudioData: (ByteArray) -> Unit): ValueUtil.CxrStatus? {
+        try {
+            Log.d(TAG, "Setting audio stream listener...")
+            cxrApi.setAudioStreamListener(object : com.rokid.cxr.client.extend.listeners.AudioStreamListener {
+                override fun onStartAudioStream(status: Int, msg: String?) {
+                    Log.d(TAG, "onStartAudioStream: status=$status, msg=$msg")
+                }
+
+                override fun onAudioStream(data: ByteArray?, length: Int, p2: Int) {
+                    if (data != null && length > 0) {
+                        onAudioData(data.copyOf(length))
+                    }
+                }
+            })
+            
+            Log.d(TAG, "Opening audio record...")
+            // Using scene ID 1 and a dummy identifier
+            val status = cxrApi.openAudioRecord(1, "phone-app")
+            Log.d(TAG, "Open audio record status: $status")
+            return status
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting remote mic streaming", e)
+            return null
+        }
+    }
+
+    /**
+     * Stop Remote Microphone Streaming
+     */
+    fun stopRemoteMicStreaming() {
+        try {
+            Log.d(TAG, "Closing audio record...")
+            cxrApi.closeAudioRecord("phone-app")
+            cxrApi.setAudioStreamListener(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping remote mic streaming", e)
+        }
+    }
+
     /**
      * Release resources
      */

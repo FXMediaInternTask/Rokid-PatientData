@@ -162,6 +162,7 @@ class LiveAudioManager(
         try {
             // Set communication mode to enable AEC
             audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            audioManager?.isSpeakerphoneOn = true // Force sound to main speaker
 
             // Calculate minimum buffer size
             val minBufferSize = AudioRecord.getMinBufferSize(

@@ -100,16 +100,9 @@ class GlassesViewModel(
             return
         }
 
-        if (currentState.isListening) {
-            stopRecording()
-        } else {
-            if (_appScreen.value == AppScreen.Main) {
-                startRecording()
-            } else {
-                // Return to main state after viewing a response
-                _appScreen.value = AppScreen.Main
-                _uiState.update { it.copy(displayText = "Tap to start", hintText = "Ready") }
-            }
+        // Instead of manual recording, send Key Event to toggle Live Mode on Phone
+        viewModelScope.launch {
+            bluetoothClient.sendKeyEvent(66) // 66 is KEYCODE_ENTER
         }
     }
 
@@ -345,6 +338,29 @@ class GlassesViewModel(
             MessageType.HEARTBEAT -> {
                 viewModelScope.launch {
                     bluetoothClient.sendMessage(Message(type = MessageType.HEARTBEAT_ACK))
+                }
+            }
+            MessageType.LIVE_SESSION_START -> {
+                Log.d(TAG, "Live Session Started message received from phone")
+                _appScreen.value = AppScreen.Response
+                _uiState.update {
+                    it.copy(
+                        isProcessing = false,
+                        displayText = "Live Active",
+                        hintText = "Speak now"
+                    )
+                }
+            }
+            MessageType.LIVE_SESSION_END -> {
+                Log.d(TAG, "Live Session Ended message received from phone")
+                _appScreen.value = AppScreen.Main
+                _uiState.update {
+                    it.copy(
+                        isListening = false,
+                        isProcessing = false,
+                        displayText = "Tap to start",
+                        hintText = "Live session ended"
+                    )
                 }
             }
             else -> {}

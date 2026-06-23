@@ -29,6 +29,7 @@ import com.fxMedia.androidAPITest.ui.theme.RokidPhoneTheme
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
+import com.fxMedia.androidAPITest.viewmodel.AudioOutput
 import com.fxMedia.androidAPITest.viewmodel.MicSource
 
 @Composable
@@ -41,6 +42,8 @@ fun HomeScreen(
     onSendAnnotation: (String) -> Unit,
     micSource: MicSource = MicSource.PHONE,
     onToggleMic: () -> Unit = {},
+    audioOutput: AudioOutput = AudioOutput.BOTH,
+    onToggleOutput: () -> Unit = {},
     isLiveActive: Boolean = false,
     onToggleLive: () -> Unit = {},
     isLoggedIn: Boolean = false,
@@ -50,6 +53,7 @@ fun HomeScreen(
     isAzureValid: Boolean = false,
     isAzureChecking: Boolean = false,
     onResetConversation: () -> Unit = {},
+    statusMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     HomeScreenContent(
@@ -61,6 +65,8 @@ fun HomeScreen(
         onDisconnect = onDisconnect,
         micSource = micSource,
         onToggleMic = onToggleMic,
+        audioOutput = audioOutput,
+        onToggleOutput = onToggleOutput,
         isLiveActive = isLiveActive,
         onToggleLive = onToggleLive,
         isLoggedIn = isLoggedIn,
@@ -70,6 +76,7 @@ fun HomeScreen(
         isAzureValid = isAzureValid,
         isAzureChecking = isAzureChecking,
         onResetConversation = onResetConversation,
+        statusMessage = statusMessage,
         modifier = modifier
     )
 }
@@ -84,6 +91,8 @@ fun HomeScreenContent(
     onDisconnect: () -> Unit = {},
     micSource: MicSource = MicSource.PHONE,
     onToggleMic: () -> Unit = {},
+    audioOutput: AudioOutput = AudioOutput.BOTH,
+    onToggleOutput: () -> Unit = {},
     isLiveActive: Boolean = false,
     onToggleLive: () -> Unit = {},
     isLoggedIn: Boolean = false,
@@ -93,20 +102,17 @@ fun HomeScreenContent(
     isAzureValid: Boolean = false,
     isAzureChecking: Boolean = false,
     onResetConversation: () -> Unit = {},
+    statusMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Simple Title
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        item {
             Text(
                 text = "Rokid Assistant",
                 style = MaterialTheme.typography.headlineMedium,
@@ -116,93 +122,145 @@ fun HomeScreenContent(
         }
 
         // Connection Status
-        ConnectionStatusCard(
-            connectionState = connectionState,
-            deviceName = connectedGlassesName,
-            onConnect = onConnect,
-            onDisconnect = onDisconnect
-        )
+        item {
+            ConnectionStatusCard(
+                connectionState = connectionState,
+                deviceName = connectedGlassesName,
+                onConnect = onConnect,
+                onDisconnect = onDisconnect
+            )
+        }
 
-        // Mic Selection Card
-        MicSelectionCard(
-            currentSource = micSource,
-            onToggle = onToggleMic,
-            isGlassesConnected = connectionState == ConnectionState.CONNECTED,
-            isLiveActive = isLiveActive,
-            onToggleLive = onToggleLive
-        )
+        // Mic & Output Selection Card
+        item {
+            MicSelectionCard(
+                currentSource = micSource,
+                onToggle = onToggleMic,
+                currentOutput = audioOutput,
+                onToggleOutput = onToggleOutput,
+                isGlassesConnected = connectionState == ConnectionState.CONNECTED,
+                isLiveActive = isLiveActive,
+                onToggleLive = onToggleLive
+            )
+        }
 
         // API Login Card
-        LoginCard(
-            isLoggedIn = isLoggedIn,
-            isLoading = isLoginLoading,
-            onLogin = onLogin
-        )
+        item {
+            LoginCard(
+                isLoggedIn = isLoggedIn,
+                isLoading = isLoginLoading,
+                onLogin = onLogin
+            )
+        }
 
         // Azure STT Status & Test Card
-        AzureStatusCard(
-            isValid = isAzureValid,
-            isChecking = isAzureChecking,
-            onTest = onTestAzure
-        )
+        item {
+            AzureStatusCard(
+                isValid = isAzureValid,
+                isChecking = isAzureChecking,
+                onTest = onTestAzure
+            )
+        }
 
         // Manual Annotation Card
-        ManualAnnotationCard(onSend = onSendAnnotation)
+        item {
+            ManualAnnotationCard(onSend = onSendAnnotation)
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Latest API Response
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Conversation:",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color(0xFF88B0C4)
-            )
-            IconButton(
-                onClick = onResetConversation,
-                modifier = Modifier.size(24.dp)
+        // Animated Status Message
+        item {
+            AnimatedVisibility(
+                visible = statusMessage != null,
+                enter = fadeIn(),
+                exit = fadeOut()
             ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Reset Conversation",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(18.dp)
-                )
+                statusMessage?.let {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF88B0C4).copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF88B0C4)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF88B0C4)
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
-        ) {
-            if (transcripts.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(text = "No history yet", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+        // Conversation Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Conversation History:",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color(0xFF88B0C4)
+                )
+                IconButton(
+                    onClick = onResetConversation,
+                    modifier = Modifier.size(24.dp)
                 ) {
-                    items(transcripts) { text ->
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Reset Conversation",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // Conversation History Items
+        if (transcripts.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text(text = "No history yet", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        } else {
+            items(transcripts) { text ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             text = text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White
                         )
-                        Divider(
-                            color = Color.White.copy(alpha = 0.05f),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
                     }
                 }
             }
+        }
+        
+        // Bottom Spacer for padding
+        item {
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -421,6 +479,8 @@ private fun ManualAnnotationCard(onSend: (String) -> Unit) {
 private fun MicSelectionCard(
     currentSource: MicSource,
     onToggle: () -> Unit,
+    currentOutput: AudioOutput,
+    onToggleOutput: () -> Unit,
     isGlassesConnected: Boolean,
     isLiveActive: Boolean,
     onToggleLive: () -> Unit
@@ -439,7 +499,7 @@ private fun MicSelectionCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Microphone Source",
+                        text = "Microphone Source (Input)",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.Gray
                     )
@@ -479,7 +539,58 @@ private fun MicSelectionCard(
             HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Second Row: ElevenLabs Live Session
+            // Second Row: Audio Output Selection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Audio Output (Speaker)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color(0xFF81C784),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when(currentOutput) {
+                                AudioOutput.PHONE -> "Phone Speaker Only"
+                                AudioOutput.GLASSES -> "Rokid Glasses Only"
+                                AudioOutput.BOTH -> "Both (Phone & Glasses)"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onToggleOutput,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF88B0C4)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Switch", fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Third Row: ElevenLabs Live Session
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

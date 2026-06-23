@@ -433,6 +433,16 @@ class BluetoothSppClient(
     }
     
     /**
+     * Send hardware key event to phone
+     */
+    suspend fun sendKeyEvent(keyCode: Int): Boolean {
+        return sendMessage(Message(
+            type = MessageType.KEY_EVENT,
+            payload = keyCode.toString()
+        ))
+    }
+    
+    /**
      * Start reading messages
      */
     private fun startReading() {

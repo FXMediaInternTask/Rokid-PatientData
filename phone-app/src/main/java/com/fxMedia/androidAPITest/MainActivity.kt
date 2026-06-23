@@ -114,6 +114,8 @@ fun PhoneMainScreen(
                         onSendAnnotation = { viewModel.sendTestAnnotation(it) },
                         micSource = uiState.micSource,
                         onToggleMic = { viewModel.toggleMicSource() },
+                        audioOutput = uiState.audioOutput,
+                        onToggleOutput = { viewModel.toggleAudioOutput() },
                         isLiveActive = uiState.isElevenLabsLiveActive,
                         onToggleLive = { viewModel.toggleElevenLabsLive() },
                         isLoggedIn = uiState.isLoggedIn,
@@ -122,7 +124,8 @@ fun PhoneMainScreen(
                         onTestAzure = { viewModel.testAzureSTT() },
                         isAzureValid = uiState.isAzureValid,
                         isAzureChecking = uiState.isAzureChecking,
-                        onResetConversation = { viewModel.resetConversation() }
+                        onResetConversation = { viewModel.resetConversation() },
+                        statusMessage = uiState.statusMessage
                     )
                 }
             }

@@ -180,7 +180,7 @@ class TextToSpeechService(private val context: Context) {
         tts?.synthesizeToFile(text, null, tempFile, "sync_to_glasses")
     }
 
-    private fun playAudioData(audioData: ByteArray) {
+    fun playAudioData(audioData: ByteArray, onComplete: (() -> Unit)? = null) {
         try {
             val tempFile = File.createTempFile("tts_", ".mp3", context.cacheDir)
             FileOutputStream(tempFile).use { it.write(audioData) }
@@ -191,16 +191,26 @@ class TextToSpeechService(private val context: Context) {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION) // Match Communication Mode
                         .build()
                 )
-                setOnCompletionListener { mp -> mp.release(); tempFile.delete() }
-                setOnErrorListener { mp, _, _ -> mp.release(); tempFile.delete(); true }
+                setOnCompletionListener { mp -> 
+                    mp.release()
+                    tempFile.delete()
+                    onComplete?.invoke()
+                }
+                setOnErrorListener { mp, _, _ -> 
+                    mp.release()
+                    tempFile.delete()
+                    onComplete?.invoke() // Call even on error to avoid VAD being stuck
+                    true 
+                }
                 prepare()
                 start()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play audio", e)
+            onComplete?.invoke()
         }
     }
 

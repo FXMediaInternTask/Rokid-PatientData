@@ -40,6 +40,12 @@ enum class MicSource {
     GLASSES
 }
 
+enum class AudioOutput {
+    PHONE,
+    GLASSES,
+    BOTH
+}
+
 data class PhoneUiState(
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val bluetoothState: BluetoothConnectionState = BluetoothConnectionState.DISCONNECTED,
@@ -52,7 +58,9 @@ data class PhoneUiState(
     val isAzureChecking: Boolean = false,
     val isRemoteRecording: Boolean = false,
     val micSource: MicSource = MicSource.PHONE,
-    val isElevenLabsLiveActive: Boolean = false
+    val audioOutput: AudioOutput = AudioOutput.BOTH,
+    val isElevenLabsLiveActive: Boolean = false,
+    val statusMessage: String? = null
 )
 
 class PhoneViewModel(application: Application) : AndroidViewModel(application) {
@@ -63,6 +71,9 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private val btManager = BluetoothSppManager(application, viewModelScope)
     private val cxrManager = com.fxMedia.androidAPITest.service.cxr.CxrMobileManager(application)
     private val elevenLabsLiveService = com.fxMedia.androidAPITest.service.ai.ElevenLabsLiveService(application)
+    private val vadLiveService = com.fxMedia.androidAPITest.service.ai.VadLiveService(application) { audioData ->
+        handleIncomingVoice(audioData)
+    }
     private val tokenManager = TokenManager(application)
     private val settingsRepository = SettingsRepository.getInstance(application)
     private val sttCredentialsRepository = SttCredentialsRepository.getInstance(application)
@@ -124,6 +135,12 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                     MessageType.VOICE_START -> {
                         _uiState.update { it.copy(isRemoteRecording = true) }
                     }
+                    MessageType.KEY_EVENT -> {
+                        if (message.payload == "66") {
+                            Log.d(TAG, "Enter key (66) from glasses detected")
+                            toggleElevenLabsLive()
+                        }
+                    }
                     else -> {}
                 }
             }
@@ -180,12 +197,16 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleIncomingVoice(audioData: ByteArray) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isTranscribing = true) }
-            updateTranscripts("Processing voice...")
+            // Pause VAD while processing and AI is talking
+            if (_uiState.value.isElevenLabsLiveActive) {
+                vadLiveService.pause()
+            }
+            
+            _uiState.update { it.copy(isTranscribing = true, statusMessage = "Processing voice...") }
             
             val service = sttService ?: run {
                 updateTranscripts("Error: STT service not configured")
-                _uiState.update { it.copy(isTranscribing = false) }
+                _uiState.update { it.copy(isTranscribing = false, statusMessage = null) }
                 return@launch
             }
 
@@ -215,11 +236,12 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     fun sendTestAnnotation(text: String) {
         viewModelScope.launch {
             try {
+                _uiState.update { it.copy(statusMessage = "Sending to AI...") }
                 updateTranscripts("You: $text")
-                updateTranscripts("Sending...")
                 
                 val savedToken = tokenManager.getToken() ?: run {
                     updateTranscripts("Error: Not logged in")
+                    _uiState.update { it.copy(statusMessage = null) }
                     return@launch
                 }
 
@@ -238,8 +260,8 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 ttsService.speak(reply) { audioData ->
                     // This block runs when audio data is successfully synthesized (from ElevenLabs or Fallback)
                     viewModelScope.launch {
-                        // 1. Send Audio to glasses first (largest payload)
-                        if (audioData.isNotEmpty()) {
+                        // 1. Send Audio to glasses if output is GLASSES or BOTH
+                        if (audioData.isNotEmpty() && (_uiState.value.audioOutput == AudioOutput.GLASSES || _uiState.value.audioOutput == AudioOutput.BOTH)) {
                             btManager.sendMessage(Message(
                                 type = MessageType.AI_RESPONSE_TTS,
                                 binaryData = audioData
@@ -252,15 +274,41 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                             payload = reply
                         ))
                         
-                        // 3. Update Phone UI and trigger local playback
-                        // Note: TextToSpeechService already handles local playback inside speak()
+                        // 3. Update Phone UI
                         updateTranscripts("AI: $reply")
+                        _uiState.update { it.copy(statusMessage = null) }
+                        
+                        // 4. Play Locally on Phone if output is PHONE or BOTH
+                        if (audioData.isNotEmpty() && (_uiState.value.audioOutput == AudioOutput.PHONE || _uiState.value.audioOutput == AudioOutput.BOTH)) {
+                            // If VAD is active, we must ensure it doesn't listen to the AI
+                            if (_uiState.value.isElevenLabsLiveActive) {
+                                vadLiveService.pause()
+                            }
+                            
+                            // Ensure speakerphone is active
+                            val am = getApplication<Application>().getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                            am?.isSpeakerphoneOn = true
+
+                            // Play via TTS service
+                            ttsService.playAudioData(audioData) {
+                                // This callback runs when playback finishes
+                                if (_uiState.value.isElevenLabsLiveActive) {
+                                    vadLiveService.resume()
+                                }
+                            }
+                        } else {
+                            // If not playing locally, resume VAD immediately
+                            if (_uiState.value.isElevenLabsLiveActive) {
+                                vadLiveService.resume()
+                            }
+                        }
                     }
                 }
 
             } catch (e: Exception) {
                 updateTranscripts("Error: ${e.message}")
                 btManager.sendMessage(Message(type = MessageType.AI_ERROR, payload = e.message))
+                _uiState.update { it.copy(statusMessage = null) }
             }
         }
     }
@@ -305,11 +353,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateTranscripts(text: String) {
         _uiState.update { state ->
             val currentList = state.transcripts
-            val newList = when {
-                text == "Processing voice..." || text == "Sending..." -> (listOf(text) + currentList).take(50)
-                currentList.firstOrNull() == "Processing voice..." || currentList.firstOrNull() == "Sending..." -> listOf(text) + currentList.drop(1)
-                else -> (listOf(text) + currentList).take(50)
-            }
+            val newList = (listOf(text) + currentList).take(50)
             state.copy(transcripts = newList)
         }
         saveTranscripts()
@@ -346,9 +390,10 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         if (newSource == MicSource.GLASSES) {
             Log.d(TAG, "Switching to Glasses Mic")
             cxrManager.startRemoteMicStreaming { audioData ->
-                // This data comes from glasses. 
-                // If ElevenLabs Live is active, we might need a way to feed it.
-                // For now, it's captured and logged.
+                // Feed the glasses audio into VAD if Live Session is active
+                if (_uiState.value.isElevenLabsLiveActive && _uiState.value.micSource == MicSource.GLASSES) {
+                    vadLiveService.feedAudio(audioData)
+                }
                 Log.v(TAG, "Received ${audioData.size} bytes from Glasses mic")
             }
         } else {
@@ -357,18 +402,36 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleAudioOutput() {
+        val current = _uiState.value.audioOutput
+        val next = when (current) {
+            AudioOutput.PHONE -> AudioOutput.GLASSES
+            AudioOutput.GLASSES -> AudioOutput.BOTH
+            AudioOutput.BOTH -> AudioOutput.PHONE
+        }
+        _uiState.update { it.copy(audioOutput = next) }
+        updateTranscripts("Audio Output set to: ${next.name}")
+    }
+
     fun toggleElevenLabsLive() {
         val isActive = _uiState.value.isElevenLabsLiveActive
         if (isActive) {
-            elevenLabsLiveService.endSession()
+            vadLiveService.stop()
             _uiState.update { it.copy(isElevenLabsLiveActive = false) }
+            updateTranscripts("VAD Session Ended")
+            
+            // Notify glasses
+            viewModelScope.launch {
+                btManager.sendMessage(Message(type = MessageType.LIVE_SESSION_END))
+            }
         } else {
-            val settings = settingsRepository.getSettings()
-            if (settings.elevenlabsAgentId.isNotBlank()) {
-                elevenLabsLiveService.startSession(settings.elevenlabsAgentId)
-                _uiState.update { it.copy(isElevenLabsLiveActive = true) }
-            } else {
-                updateTranscripts("Error: ElevenLabs Agent ID not configured")
+            vadLiveService.start()
+            _uiState.update { it.copy(isElevenLabsLiveActive = true) }
+            updateTranscripts("VAD Session Started - Listening...")
+            
+            // Notify glasses
+            viewModelScope.launch {
+                btManager.sendMessage(Message(type = MessageType.LIVE_SESSION_START))
             }
         }
     }

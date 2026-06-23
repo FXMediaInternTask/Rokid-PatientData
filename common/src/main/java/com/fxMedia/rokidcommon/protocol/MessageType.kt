@@ -47,6 +47,9 @@ enum class MessageType(val code: Int) {
     LIVE_TRANSCRIPTION(0x52),    // Bidirectional: Real-time transcription
     VIDEO_FRAME(0x53),           // Glasses -> Phone: Video frame for Live mode
     
+    // Remote Control (0x60-0x6F)
+    KEY_EVENT(0x60),             // Glasses -> Phone: Hardware key pressed (payload = keyCode)
+
     // System control (0xF0-0xFF)
     SYSTEM_STATUS(0xF0),         // Bidirectional: System status
     SYSTEM_CONFIG(0xF1),         // Phone -> Glasses: Config update

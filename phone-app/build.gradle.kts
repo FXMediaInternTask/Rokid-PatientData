@@ -36,8 +36,8 @@ android {
         applicationId = "com.fxMedia.androidAPITest"
         minSdk = 28
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 7
+        versionName = "0.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -185,6 +185,9 @@ dependencies {
 
     // ElevenLabs SDK
     implementation(libs.elevenlabs.android)
+
+    // WebRTC VAD
+    implementation(libs.webrtc.vad)
     
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

@@ -254,13 +254,11 @@ class CxrMobileManager(private val context: Context) {
                 delay(DEINIT_SETTLE_DELAY_MS)
 
                 // Step 4: Now init with the callback.
+                // FIX: Set registered = true BEFORE init, so we don't miss synchronous callbacks
+                isCallbackRegistered = true
                 Log.d(TAG, "Initializing Bluetooth with device: ${device.name}")
                 cxrApi.initBluetooth(context, device, bluetoothCallback)
-
-                // Step 5: Only NOW mark the callback as registered, so subsequent
-                // SDK callbacks (onConnectionInfo, onConnected, etc.) are processed.
-                isCallbackRegistered = true
-                Log.d(TAG, "Bluetooth callback registered")
+                Log.d(TAG, "Bluetooth callback registered and init called")
 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to init Bluetooth", e)
@@ -484,12 +482,16 @@ class CxrMobileManager(private val context: Context) {
     /**
      * Remote Microphone Streaming
      */
-    fun startRemoteMicStreaming(onAudioData: (ByteArray) -> Unit): ValueUtil.CxrStatus? {
+    fun startRemoteMicStreaming(
+        onStatus: ((Int, String?) -> Unit)? = null,
+        onAudioData: (ByteArray) -> Unit
+    ): ValueUtil.CxrStatus? {
         try {
             Log.d(TAG, "Setting audio stream listener...")
             cxrApi.setAudioStreamListener(object : com.rokid.cxr.client.extend.listeners.AudioStreamListener {
                 override fun onStartAudioStream(status: Int, msg: String?) {
                     Log.d(TAG, "onStartAudioStream: status=$status, msg=$msg")
+                    onStatus?.invoke(status, msg)
                 }
 
                 override fun onAudioStream(data: ByteArray?, length: Int, p2: Int) {

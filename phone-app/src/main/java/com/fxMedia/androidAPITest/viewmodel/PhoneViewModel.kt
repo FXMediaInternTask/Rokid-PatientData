@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fxMedia.androidAPITest.R
 import com.fxMedia.rokidcommon.protocol.ConnectionState
+import com.fxMedia.rokidcommon.protocol.Message
 import com.fxMedia.rokidcommon.protocol.MessageType
 import com.fxMedia.androidAPITest.api.RetrofitClient
 import com.fxMedia.androidAPITest.api.model.LoginRequest
@@ -21,15 +22,12 @@ import com.fxMedia.androidAPITest.service.stt.SttCredentialsRepository
 import com.fxMedia.androidAPITest.service.stt.SttService
 import com.fxMedia.androidAPITest.service.stt.SttServiceFactory
 import com.fxMedia.androidAPITest.service.stt.SttValidationResult
-import com.fxMedia.rokidcommon.protocol.Message
+import com.fxMedia.androidAPITest.data.log.LogManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -42,8 +40,7 @@ enum class MicSource {
 
 enum class AudioOutput {
     PHONE,
-    GLASSES,
-    BOTH
+    GLASSES
 }
 
 data class PhoneUiState(
@@ -58,9 +55,11 @@ data class PhoneUiState(
     val isAzureChecking: Boolean = false,
     val isRemoteRecording: Boolean = false,
     val micSource: MicSource = MicSource.PHONE,
-    val audioOutput: AudioOutput = AudioOutput.BOTH,
+    val audioOutput: AudioOutput = AudioOutput.PHONE,
     val isElevenLabsLiveActive: Boolean = false,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val logs: List<com.fxMedia.androidAPITest.data.log.LogEntry> = emptyList(),
+    val appVersion: String = "1.0.0"
 )
 
 class PhoneViewModel(application: Application) : AndroidViewModel(application) {
@@ -68,6 +67,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(PhoneUiState())
     val uiState: StateFlow<PhoneUiState> = _uiState.asStateFlow()
 
+    private val logManager = LogManager.getInstance(application)
     private val btManager = BluetoothSppManager(application, viewModelScope)
     private val cxrManager = com.fxMedia.androidAPITest.service.cxr.CxrMobileManager(application)
     private val elevenLabsLiveService = com.fxMedia.androidAPITest.service.ai.ElevenLabsLiveService(application)
@@ -88,15 +88,92 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         validateExistingToken()
         currentSessionId = tokenManager.getSessionId()
 
+        // Get app version
+        try {
+            val pInfo = application.packageManager.getPackageInfo(application.packageName, 0)
+            val version = pInfo.versionName
+            _uiState.update { it.copy(appVersion = version ?: "1.0.0") }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(appVersion = "1.0.0") }
+        }
+
+        // Collect logs
+        viewModelScope.launch {
+            logManager.logs.collect { logs ->
+                _uiState.update { it.copy(logs = logs) }
+            }
+        }
+
         viewModelScope.launch {
             btManager.connectionState.collect { state ->
+                val prevConnectionState = _uiState.value.connectionState
                 val connectionState = when (state) {
                     BluetoothConnectionState.DISCONNECTED -> ConnectionState.DISCONNECTED
                     BluetoothConnectionState.LISTENING -> ConnectionState.CONNECTING // Wait for incoming
                     BluetoothConnectionState.CONNECTING -> ConnectionState.CONNECTING
                     BluetoothConnectionState.CONNECTED -> ConnectionState.CONNECTED
                 }
+                
                 _uiState.update { it.copy(bluetoothState = state, connectionState = connectionState) }
+
+                if (state == BluetoothConnectionState.CONNECTED) {
+                    logManager.d(TAG, "Glasses SPP Connected - Initializing CXR Bluetooth")
+                    
+                    // Keep Mic and Audio on PHONE by default for TWS-like behavior
+                    // The user can manually switch to GLASSES if they want custom SPP streaming
+                    _uiState.update { it.copy(
+                        micSource = MicSource.PHONE,
+                        audioOutput = AudioOutput.PHONE
+                    )}
+                    
+                    // Initialize CXR Bluetooth with the connected device
+                    btManager.connectedDevice?.let { device ->
+                        cxrManager.initBluetooth(device)
+                    }
+                } else if (state == BluetoothConnectionState.DISCONNECTED) {
+                    // Only log and revert if we were previously connected/connecting
+                    if (prevConnectionState != ConnectionState.DISCONNECTED) {
+                        logManager.d(TAG, "Glasses Disconnected - Reverting to Phone Mic & Audio")
+                        _uiState.update { it.copy(
+                            micSource = MicSource.PHONE,
+                            audioOutput = AudioOutput.PHONE
+                        )}
+                    }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            cxrManager.bluetoothState.collect { state ->
+                when (state) {
+                    is com.fxMedia.androidAPITest.service.cxr.CxrMobileManager.BluetoothState.Connected -> {
+                        logManager.d(TAG, "CXR Bluetooth Connected - Setting AI Event Listener")
+                        
+                        // Set AI Event Listener to handle glasses AI button (long press)
+                        cxrManager.setAiEventListener(
+                            onKeyDown = {
+                                logManager.d(TAG, "AI Button on glasses pressed - signaling SPP start")
+                                toggleElevenLabsLive()
+                            }
+                        )
+                    }
+                    is com.fxMedia.androidAPITest.service.cxr.CxrMobileManager.BluetoothState.Failed -> {
+                        logManager.e(TAG, "CXR Error: ${state.error}")
+                        updateTranscripts("CXR Error: ${state.error}")
+                    }
+                    else -> {}
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            vadLiveService.isUserSpeaking.collect { isSpeaking ->
+                if (_uiState.value.isElevenLabsLiveActive) {
+                    logManager.d(TAG, "VAD speaking status changed: $isSpeaking - sending message to glasses")
+                    btManager.sendMessage(Message(
+                        type = if (isSpeaking) MessageType.VOICE_START else MessageType.VOICE_END
+                    ))
+                }
             }
         }
 
@@ -135,9 +212,23 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                     MessageType.VOICE_START -> {
                         _uiState.update { it.copy(isRemoteRecording = true) }
                     }
-                    MessageType.KEY_EVENT -> {
-                        if (message.payload == "66") {
-                            Log.d(TAG, "Enter key (66) from glasses detected")
+                    MessageType.VOICE_DATA -> {
+                        message.binaryData?.let { audioData ->
+                            // Feed the SPP audio into VAD if Live Session is active
+                            if (_uiState.value.isElevenLabsLiveActive && _uiState.value.micSource == MicSource.GLASSES) {
+                                vadLiveService.feedAudio(audioData)
+                            }
+                        }
+                    }
+                    MessageType.LIVE_SESSION_START -> {
+                        logManager.i(TAG, "VAD Session START triggered from glasses")
+                        if (!_uiState.value.isElevenLabsLiveActive) {
+                            toggleElevenLabsLive()
+                        }
+                    }
+                    MessageType.LIVE_SESSION_END -> {
+                        logManager.i(TAG, "VAD Session STOP triggered from glasses")
+                        if (_uiState.value.isElevenLabsLiveActive) {
                             toggleElevenLabsLive()
                         }
                     }
@@ -157,19 +248,19 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.update { it.copy(transcripts = savedList) }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load transcripts", e)
+                logManager.e(TAG, "Failed to load transcripts", e)
             }
         }
         
-        // Auto-start listening on init so glasses can connect immediately
-        // Added a 1s delay to let the BT stack settle after app launch
+        /* Auto-start listening disabled as per user request
         viewModelScope.launch {
             delay(1000)
             if (btManager.isBluetoothEnabled()) {
-                Log.d(TAG, "Auto-starting Bluetooth listener")
+                logManager.d(TAG, "Auto-starting Bluetooth listener")
                 btManager.startListening()
             }
         }
+        */
     }
 
     private fun updateSttService() {
@@ -197,6 +288,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleIncomingVoice(audioData: ByteArray) {
         viewModelScope.launch {
+            logManager.d(TAG, "Handling incoming voice data (${audioData.size} bytes)")
             // Pause VAD while processing and AI is talking
             if (_uiState.value.isElevenLabsLiveActive) {
                 vadLiveService.pause()
@@ -205,6 +297,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(isTranscribing = true, statusMessage = "Processing voice...") }
             
             val service = sttService ?: run {
+                logManager.e(TAG, "STT service not configured")
                 updateTranscripts("Error: STT service not configured")
                 _uiState.update { it.copy(isTranscribing = false, statusMessage = null) }
                 return@launch
@@ -212,21 +305,37 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
 
             try {
                 val language = settingsRepository.getSettings().speechLanguage.ifBlank { "en-US" }
+                logManager.d(TAG, "Starting transcription with language: $language")
                 when (val result = service.transcribe(audioData, language)) {
                     is SpeechResult.Success -> {
-                        btManager.sendMessage(Message(
-                            type = MessageType.USER_TRANSCRIPT,
-                            payload = result.text
-                        ))
-                        sendTestAnnotation(result.text)
+                        val cleanedText = result.text.replace("**", "")
+                        logManager.i(TAG, "Transcription Success: $cleanedText")
+                        logManager.d(TAG, "Sending transcript to glasses...")
+                        viewModelScope.launch {
+                            val sent = btManager.sendMessage(Message(
+                                type = MessageType.USER_TRANSCRIPT,
+                                payload = cleanedText
+                            ))
+                            if (sent) logManager.d(TAG, "Transcript sent to glasses successfully")
+                            else logManager.e(TAG, "Failed to send transcript to glasses")
+                        }
+                        sendTestAnnotation(cleanedText)
                     }
                     is SpeechResult.Error -> {
+                        logManager.e(TAG, "Transcription Failed: ${result.message}")
                         updateTranscripts("Transcription error: ${result.message}")
                         btManager.sendMessage(Message(type = MessageType.AI_ERROR, payload = result.message))
+                        if (_uiState.value.isElevenLabsLiveActive) {
+                            vadLiveService.resume()
+                        }
                     }
                 }
             } catch (e: Exception) {
+                logManager.e(TAG, "STT failed", e)
                 updateTranscripts("STT failed: ${e.message}")
+                if (_uiState.value.isElevenLabsLiveActive) {
+                    vadLiveService.resume()
+                }
             } finally {
                 _uiState.update { it.copy(isTranscribing = false) }
             }
@@ -242,62 +351,82 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 val savedToken = tokenManager.getToken() ?: run {
                     updateTranscripts("Error: Not logged in")
                     _uiState.update { it.copy(statusMessage = null) }
+                    if (_uiState.value.isElevenLabsLiveActive) {
+                        logManager.d(TAG, "Auth Error - Stopping Live Session")
+                        vadLiveService.stop()
+                        _uiState.update { it.copy(isElevenLabsLiveActive = false) }
+                        btManager.sendMessage(Message(type = MessageType.LIVE_SESSION_END))
+                    }
                     return@launch
                 }
 
+                logManager.i(TAG, "Sending message to AI...")
                 val response = RetrofitClient.testInstance.sendTest(
                     token = "Bearer $savedToken",
-                    request = TestRequest(message = text, sessionId = currentSessionId)
+                    request = TestRequest(
+                        message = text,
+                        sessionId = currentSessionId,
+                        patientId = "6a41e92c008637ec66d5354a"
+                    )
                 )
                 
                 currentSessionId = response.data?.sessionId
                 tokenManager.saveSessionId(currentSessionId)
 
-                val reply = response.data?.reply ?: "Empty reply from AI"
+                val rawReply = response.data?.reply ?: "Empty reply from AI"
+                val reply = rawReply.replace("**", "")
+                logManager.i(TAG, "AI Response Received: $reply")
                 
-                // Trigger TTS: This prepares audio for glasses and phone
-                // We wait for the audio to be generated before showing text/playing
+                // 1. Trigger TTS in background IMMEDIATELY
+                logManager.d(TAG, "Requesting TTS for AI response...")
                 ttsService.speak(reply) { audioData ->
-                    // This block runs when audio data is successfully synthesized (from ElevenLabs or Fallback)
                     viewModelScope.launch {
-                        // 1. Send Audio to glasses if output is GLASSES or BOTH
-                        if (audioData.isNotEmpty() && (_uiState.value.audioOutput == AudioOutput.GLASSES || _uiState.value.audioOutput == AudioOutput.BOTH)) {
-                            btManager.sendMessage(Message(
+                        if (audioData.isNotEmpty()) {
+                            logManager.i(TAG, "TTS Audio Generated (${audioData.size} bytes)")
+                        } else {
+                            logManager.e(TAG, "TTS Audio Generation Failed or Empty")
+                        }
+
+                        // 2. Send Audio to glasses as soon as it's ready
+                        if (audioData.isNotEmpty() && _uiState.value.audioOutput == AudioOutput.GLASSES) {
+                            logManager.d(TAG, "Sending TTS Audio to glasses...")
+                            val audioSent = btManager.sendMessage(Message(
                                 type = MessageType.AI_RESPONSE_TTS,
                                 binaryData = audioData
                             ))
+                            if (audioSent) logManager.d(TAG, "TTS Audio sent to glasses successfully")
+                            else logManager.e(TAG, "Failed to send TTS Audio to glasses")
                         }
-                        
-                        // 2. Send Text to glasses
-                        btManager.sendMessage(Message(
+
+                        // 3. NOW send the Text so the glasses displays it and plays the buffered audio
+                        logManager.d(TAG, "Sending Text response to glasses...")
+                        val textSent = btManager.sendMessage(Message(
                             type = MessageType.AI_RESPONSE_TEXT, 
                             payload = reply
                         ))
+                        if (textSent) logManager.d(TAG, "Text response sent to glasses successfully")
+                        else logManager.e(TAG, "Failed to send Text response to glasses")
                         
-                        // 3. Update Phone UI
+                        // Update Phone UI
                         updateTranscripts("AI: $reply")
                         _uiState.update { it.copy(statusMessage = null) }
                         
-                        // 4. Play Locally on Phone if output is PHONE or BOTH
-                        if (audioData.isNotEmpty() && (_uiState.value.audioOutput == AudioOutput.PHONE || _uiState.value.audioOutput == AudioOutput.BOTH)) {
-                            // If VAD is active, we must ensure it doesn't listen to the AI
+                        // 4. Play Locally on Phone if output is PHONE
+                        if (audioData.isNotEmpty() && _uiState.value.audioOutput == AudioOutput.PHONE) {
                             if (_uiState.value.isElevenLabsLiveActive) {
                                 vadLiveService.pause()
                             }
                             
-                            // Ensure speakerphone is active
-                            val am = getApplication<Application>().getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                            am?.isSpeakerphoneOn = true
+                            // Do NOT force speakerphone so it can route to Bluetooth (TWS behavior)
+                            // val am = getApplication<Application>().getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                            // am?.isSpeakerphoneOn = true
 
-                            // Play via TTS service
                             ttsService.playAudioData(audioData) {
-                                // This callback runs when playback finishes
                                 if (_uiState.value.isElevenLabsLiveActive) {
                                     vadLiveService.resume()
                                 }
                             }
                         } else {
-                            // If not playing locally, resume VAD immediately
                             if (_uiState.value.isElevenLabsLiveActive) {
                                 vadLiveService.resume()
                             }
@@ -309,6 +438,9 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 updateTranscripts("Error: ${e.message}")
                 btManager.sendMessage(Message(type = MessageType.AI_ERROR, payload = e.message))
                 _uiState.update { it.copy(statusMessage = null) }
+                if (_uiState.value.isElevenLabsLiveActive) {
+                    vadLiveService.resume()
+                }
             }
         }
     }
@@ -318,15 +450,18 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoginLoading = true) }
             try {
-                val response = RetrofitClient.authService.validateToken(ValidateTokenRequest(token = existingToken))
+                val response = RetrofitClient.authService.validateToken(existingToken)
                 if (response.status) {
                     _uiState.update { it.copy(isLoggedIn = true) }
                 } else {
+                    logManager.d(TAG, "Token invalid: ${response.token}")
                     tokenManager.deleteToken()
                     _uiState.update { it.copy(isLoggedIn = false) }
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoggedIn = true) }
+                logManager.e(TAG, "Token validation error: ${e.message}")
+                tokenManager.deleteToken()
+                _uiState.update { it.copy(isLoggedIn = false) }
             } finally {
                 _uiState.update { it.copy(isLoginLoading = false) }
             }
@@ -337,12 +472,17 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoginLoading = true) }
             try {
-                val response = RetrofitClient.authService.login(LoginRequest(username = "unity", password = "Unity@123"))
+                val response = RetrofitClient.authService.login("unity", "Unity@123")
                 if (response.status && response.token != null) {
                     tokenManager.saveToken(response.token)
                     _uiState.update { it.copy(isLoggedIn = true) }
+                    logManager.i(TAG, "Login successful")
+                } else {
+                    logManager.e(TAG, "Login failed: Status false")
+                    updateTranscripts("Login failed: Status false")
                 }
             } catch (e: Exception) {
+                logManager.e(TAG, "Login error", e)
                 updateTranscripts("Login error: ${e.message}")
             } finally {
                 _uiState.update { it.copy(isLoginLoading = false) }
@@ -353,7 +493,8 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateTranscripts(text: String) {
         _uiState.update { state ->
             val currentList = state.transcripts
-            val newList = (listOf(text) + currentList).take(50)
+            val cleanedText = text.replace("**", "")
+            val newList = (listOf(cleanedText) + currentList).take(50)
             state.copy(transcripts = newList)
         }
         saveTranscripts()
@@ -378,6 +519,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         saveTranscripts()
     }
 
+    /* 
     fun toggleMicSource() {
         val newSource = if (_uiState.value.micSource == MicSource.PHONE) {
             MicSource.GLASSES
@@ -387,6 +529,12 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         
         _uiState.update { it.copy(micSource = newSource) }
         
+        // If VAD is active, we need to restart it to switch between internal/external mic
+        if (_uiState.value.isElevenLabsLiveActive) {
+            vadLiveService.stop()
+            vadLiveService.start(useInternalMic = (newSource == MicSource.PHONE))
+        }
+        
         if (newSource == MicSource.GLASSES) {
             Log.d(TAG, "Switching to Glasses Mic")
             cxrManager.startRemoteMicStreaming { audioData ->
@@ -394,11 +542,9 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 if (_uiState.value.isElevenLabsLiveActive && _uiState.value.micSource == MicSource.GLASSES) {
                     vadLiveService.feedAudio(audioData)
                 }
-                Log.v(TAG, "Received ${audioData.size} bytes from Glasses mic")
             }
         } else {
             Log.d(TAG, "Switching to Phone Mic")
-            cxrManager.stopRemoteMicStreaming()
         }
     }
 
@@ -406,16 +552,17 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         val current = _uiState.value.audioOutput
         val next = when (current) {
             AudioOutput.PHONE -> AudioOutput.GLASSES
-            AudioOutput.GLASSES -> AudioOutput.BOTH
-            AudioOutput.BOTH -> AudioOutput.PHONE
+            AudioOutput.GLASSES -> AudioOutput.PHONE
         }
         _uiState.update { it.copy(audioOutput = next) }
         updateTranscripts("Audio Output set to: ${next.name}")
     }
+    */
 
     fun toggleElevenLabsLive() {
         val isActive = _uiState.value.isElevenLabsLiveActive
         if (isActive) {
+            logManager.d(TAG, "Stopping ElevenLabs Live Session")
             vadLiveService.stop()
             _uiState.update { it.copy(isElevenLabsLiveActive = false) }
             updateTranscripts("VAD Session Ended")
@@ -423,15 +570,19 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
             // Notify glasses
             viewModelScope.launch {
                 btManager.sendMessage(Message(type = MessageType.LIVE_SESSION_END))
+                cxrManager.sendTtsContent("Session stopped")
             }
         } else {
-            vadLiveService.start()
+            logManager.d(TAG, "Starting ElevenLabs Live Session")
+            val useInternal = _uiState.value.micSource == MicSource.PHONE
+            vadLiveService.start(useInternalMic = useInternal)
             _uiState.update { it.copy(isElevenLabsLiveActive = true) }
             updateTranscripts("VAD Session Started - Listening...")
             
             // Notify glasses
             viewModelScope.launch {
                 btManager.sendMessage(Message(type = MessageType.LIVE_SESSION_START))
+                cxrManager.sendTtsContent("I'm listening")
             }
         }
     }

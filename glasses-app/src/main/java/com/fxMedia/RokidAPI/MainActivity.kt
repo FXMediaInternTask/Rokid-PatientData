@@ -193,10 +193,10 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                     }
                 }
                 is AppScreen.Recording -> {
-                    RecordingScreen(
-                        displayText = uiState.displayText,
-                        isListening = uiState.isListening,
-                        isProcessing = uiState.isProcessing,
+                    // Use ResponseScreen style for Recording to keep UI unified
+                    ResponseScreen(
+                        uiState = uiState,
+                        scrollEvent = viewModel.scrollEvent,
                         onDone = { viewModel.onPrimaryTap() }
                     )
                 }
@@ -249,7 +249,12 @@ fun ResponseScreen(
         lines.chunked(4)
     }
     
-    if (pages.isEmpty()) {
+    // In Live Mode or Recording state, we might not have a response yet but we are listening
+    val isRecordingState = uiState.isListening || uiState.isProcessing
+    val showNoResponse = pages.isEmpty() && (uiState.isLiveActive || isRecordingState)
+    
+    // If truly no response and not in a session, show placeholder
+    if (pages.isEmpty() && !uiState.isLiveActive && !isRecordingState) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No response", color = rokidWhite)
         }
@@ -271,23 +276,60 @@ fun ResponseScreen(
                 interactionSource = remember { MutableInteractionSource() }
             ) { onDone() }
     ) {
+        // Listening Indicator for VAD (Live Mode)
+        if (uiState.isListening) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(30.dp)
+            ) {
+                RecordingIndicator()
+            }
+        }
+
         // Main Text Area
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.Center)
-                .padding(horizontal = 40.dp, vertical = 60.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.Center
-        ) {
-            pages[currentPageIndex].forEach { line ->
+        if (pages.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.Center)
+                    .padding(horizontal = 40.dp, vertical = 60.dp),
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.Center
+            ) {
+                pages[currentPageIndex].forEach { line ->
+                    Text(
+                        text = line,
+                        color = rokidWhite, 
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 34.sp,
+                        textAlign = TextAlign.Start
+                    )
+                }
+            }
+        } else if (uiState.isLiveActive || isRecordingState) {
+            // Placeholder while waiting for first response
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (uiState.isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color(0xFF64B5F6),
+                        strokeWidth = 3.dp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 Text(
-                    text = line,
-                    color = rokidWhite, // Use green as in screenshot
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 34.sp,
-                    textAlign = TextAlign.Start
+                    text = when {
+                        uiState.isProcessing -> "Processing..."
+                        uiState.isListening -> "Listening..."
+                        else -> "Live Mode Active"
+                    },
+                    color = rokidWhite.copy(alpha = 0.5f),
+                    fontSize = 20.sp
                 )
             }
         }
@@ -585,7 +627,9 @@ fun ResponseScreenPreview() {
     RokidGlassesTheme {
         ResponseScreen(
             uiState = GlassesUIState(
-                aiResponse = "Technological evolution and future of AI glasses.\n\n1. The Convergence of Miniaturization and Intelligence"
+                aiResponse = "Technological evolution and future of AI glasses.\n\n1. The Convergence of Miniaturization and Intelligence",
+                isLiveActive = true,
+                isListening = true
             ),
             scrollEvent = emptyFlow(),
             onDone = {}
@@ -602,7 +646,7 @@ fun MainScreenPreview() {
             isListening = false,
             isProcessing = false,
             displayText = "Connected",
-            hintText = "Tap to record",
+            hintText = "Tap to start live session",
             connectedDeviceName = "Rokid Phone",
             availableDevices = emptyList(),
             showDeviceSelector = false,

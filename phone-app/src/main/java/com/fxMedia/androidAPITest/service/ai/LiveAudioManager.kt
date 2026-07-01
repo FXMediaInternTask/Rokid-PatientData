@@ -162,7 +162,13 @@ class LiveAudioManager(
         try {
             // Set communication mode to enable AEC
             audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-            audioManager?.isSpeakerphoneOn = true // Force sound to main speaker
+            
+            // TWS behavior: If Bluetooth is available, start SCO for the microphone
+            if (audioManager?.isBluetoothScoAvailableOffCall == true) {
+                Log.d(TAG, "Bluetooth SCO available, starting SCO for microphone...")
+                audioManager?.startBluetoothSco()
+                audioManager?.isBluetoothScoOn = true
+            }
 
             // Calculate minimum buffer size
             val minBufferSize = AudioRecord.getMinBufferSize(
@@ -337,6 +343,13 @@ class LiveAudioManager(
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
+            
+            // Stop Bluetooth SCO if it was started
+            if (audioManager?.isBluetoothScoOn == true) {
+                Log.d(TAG, "Stopping Bluetooth SCO")
+                audioManager?.stopBluetoothSco()
+                audioManager?.isBluetoothScoOn = false
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to release AudioRecord", e)
         }

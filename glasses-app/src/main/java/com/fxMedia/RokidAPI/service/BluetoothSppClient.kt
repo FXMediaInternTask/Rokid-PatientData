@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.fxMedia.rokidcommon.Constants
 import com.fxMedia.rokidcommon.protocol.Message
 import com.fxMedia.rokidcommon.protocol.MessageType
 import kotlinx.coroutines.*
@@ -41,8 +42,8 @@ class BluetoothSppClient(
     companion object {
         private const val TAG = "BluetoothSppClient"
         
-        // Same UUID as phone-side
-        val SERVICE_UUID: UUID = UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        // Use shared constant from common module
+        val SERVICE_UUID: UUID = Constants.BT_SERVICE_UUID
         
         // Message delimiter
         private const val MESSAGE_DELIMITER = "\n"
@@ -171,6 +172,14 @@ class BluetoothSppClient(
                     missedHeartbeatCount = 0
                     
                     Log.d(TAG, "Connected to ${getSafeDeviceName(device)}")
+                    
+                    // Send handshake to phone
+                    scope.launch {
+                        delay(500)
+                        val handshakeMsg = Message.handshake(android.os.Build.MODEL)
+                        sendMessage(handshakeMsg)
+                        Log.d(TAG, "Handshake sent to phone: ${handshakeMsg.payload}")
+                    }
                     
                     // Start reading messages
                     startReading()
@@ -521,6 +530,11 @@ class BluetoothSppClient(
             
             val type = MessageType.fromCode(typeValue)
             if (type != null) {
+                // Handle HANDSHAKE internally
+                if (type == MessageType.HANDSHAKE) {
+                    Log.d(TAG, "Received handshake from phone: $payload")
+                }
+
                 // Handle HEARTBEAT_ACK internally to reset missed heartbeat counter
                 if (type == MessageType.HEARTBEAT_ACK) {
                     onHeartbeatAckReceived()

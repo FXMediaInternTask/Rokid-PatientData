@@ -36,8 +36,8 @@ android {
         applicationId = "com.fxMedia.androidAPITest"
         minSdk = 28
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.7"
+        versionCode = 11
+        versionName = "0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

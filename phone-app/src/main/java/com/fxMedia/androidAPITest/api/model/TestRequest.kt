@@ -8,5 +8,7 @@ data class TestRequest(
     @SerializedName("message")
     val message: String,
     @SerializedName("session_id")
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    @SerializedName("patient_id")
+    val patientId: String? = null
 )

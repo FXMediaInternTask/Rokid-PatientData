@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.fxMedia.rokidcommon.Constants
 import com.fxMedia.rokidcommon.protocol.Message
 import com.fxMedia.rokidcommon.protocol.MessageType
 import kotlinx.coroutines.*
@@ -46,7 +47,7 @@ class BluetoothSppManager(
     companion object {
         private const val TAG = "BluetoothSppManager"
         private const val SERVICE_NAME = "RokidAIAssistant"
-        private val APP_UUID: UUID = UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        private val APP_UUID: UUID = Constants.BT_SERVICE_UUID
         private const val BUFFER_SIZE = 8192
     }
     
@@ -166,6 +167,15 @@ class BluetoothSppManager(
         }
         
         _connectionState.value = BluetoothConnectionState.CONNECTED
+        
+        // Send handshake to glasses
+        scope.launch {
+            delay(500) // Give it a moment to stabilize
+            val handshakeMsg = Message.handshake(android.os.Build.MODEL)
+            sendMessage(handshakeMsg)
+            Log.d(TAG, "Handshake sent to glasses: ${handshakeMsg.payload}")
+        }
+        
         startReading()
     }
     
@@ -209,6 +219,11 @@ class BluetoothSppManager(
     
     private suspend fun processReceivedMessage(message: Message) {
         when (message.type) {
+            MessageType.HANDSHAKE -> {
+                Log.d(TAG, "Received handshake from glasses: ${message.payload}")
+                // Auto-reply with ACK if needed, or just emit to flow
+                _messageFlow.emit(message)
+            }
             MessageType.HEARTBEAT -> {
                 scope.launch { sendMessage(Message(type = MessageType.HEARTBEAT_ACK)) }
             }
@@ -217,7 +232,10 @@ class BluetoothSppManager(
                 _messageFlow.emit(message)
             }
             MessageType.VOICE_DATA -> {
-                message.binaryData?.let { audioBuffer.add(it) }
+                message.binaryData?.let { 
+                    audioBuffer.add(it)
+                    _messageFlow.emit(message) // Emit chunks for real-time processing (VAD)
+                }
             }
             MessageType.VOICE_END -> {
                 val messageBinaryData = message.binaryData

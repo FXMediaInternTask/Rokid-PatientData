@@ -39,10 +39,10 @@ class VadLiveService(
     private var isCurrentlyRecording = false
     private var isPaused = false
 
-    fun start() {
+    fun start(useInternalMic: Boolean = true) {
         if (_isActive.value) return
         
-        Log.d(TAG, "Starting VadLiveService")
+        Log.d(TAG, "Starting VadLiveService (useInternalMic=$useInternalMic)")
         isPaused = false
         
         // Initialize VAD
@@ -54,16 +54,22 @@ class VadLiveService(
             speechDurationMs = 50
         )
 
-        liveAudioManager.onAudioChunk = { chunk ->
-            if (!isPaused) {
-                processAudioChunk(chunk)
+        if (useInternalMic) {
+            liveAudioManager.onAudioChunk = { chunk ->
+                if (!isPaused) {
+                    processAudioChunk(chunk)
+                }
             }
-        }
 
-        if (liveAudioManager.startRecording()) {
-            _isActive.value = true
+            if (liveAudioManager.startRecording()) {
+                _isActive.value = true
+            } else {
+                Log.e(TAG, "Failed to start LiveAudioManager")
+            }
         } else {
-            Log.e(TAG, "Failed to start LiveAudioManager")
+            // External mic mode (e.g., from Glasses) - just activate the service
+            // and wait for feedAudio() calls
+            _isActive.value = true
         }
     }
 

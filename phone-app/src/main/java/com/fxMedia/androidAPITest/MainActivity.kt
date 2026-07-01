@@ -8,14 +8,18 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -79,24 +83,30 @@ fun PhoneMainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
 
-    Box(modifier = Modifier.fillMaxSize()){
-        Image(
-            painter = painterResource(R.drawable.image_background),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.FillBounds
-        )
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)){
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "Logo",
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth(0.5f)
-                        .padding(start = 16.dp, top = 5.dp),
-                    contentScale = ContentScale.FillWidth
-                )
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 20.dp, end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Rokid Assistant",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.title_accent),
+                        contentDescription = null,
+                        modifier = Modifier.height(20.dp),
+                        contentScale = ContentScale.FillHeight
+                    )
+                }
             },
         ) { padding ->
             NavHost(
@@ -113,9 +123,7 @@ fun PhoneMainScreen(
                         onDisconnect = { viewModel.disconnect() },
                         onSendAnnotation = { viewModel.sendTestAnnotation(it) },
                         micSource = uiState.micSource,
-                        onToggleMic = { viewModel.toggleMicSource() },
                         audioOutput = uiState.audioOutput,
-                        onToggleOutput = { viewModel.toggleAudioOutput() },
                         isLiveActive = uiState.isElevenLabsLiveActive,
                         onToggleLive = { viewModel.toggleElevenLabsLive() },
                         isLoggedIn = uiState.isLoggedIn,
@@ -125,7 +133,9 @@ fun PhoneMainScreen(
                         isAzureValid = uiState.isAzureValid,
                         isAzureChecking = uiState.isAzureChecking,
                         onResetConversation = { viewModel.resetConversation() },
-                        statusMessage = uiState.statusMessage
+                        statusMessage = uiState.statusMessage,
+                        logs = uiState.logs,
+                        appVersion = uiState.appVersion
                     )
                 }
             }

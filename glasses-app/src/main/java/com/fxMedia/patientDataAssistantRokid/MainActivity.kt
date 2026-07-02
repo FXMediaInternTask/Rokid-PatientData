@@ -235,7 +235,7 @@ fun ResponseScreen(
         uiState.aiResponse.split("\n").forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
             var currentLine = ""
-            val maxChars = 38 
+            val maxChars = 28 
             paragraph.split(" ").forEach { word ->
                 if ((currentLine.length + word.length + 1) > maxChars) {
                     lines.add(currentLine.trim())
@@ -246,7 +246,7 @@ fun ResponseScreen(
             }
             if (currentLine.isNotEmpty()) lines.add(currentLine.trim())
         }
-        lines.chunked(4)
+        lines.chunked(3)
     }
     
     if (pages.isEmpty()) {
@@ -284,10 +284,11 @@ fun ResponseScreen(
                 Text(
                     text = line,
                     color = rokidWhite, // Use green as in screenshot
-                    fontSize = 24.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Medium,
-                    lineHeight = 34.sp,
-                    textAlign = TextAlign.Start
+                    lineHeight = 32.sp,
+                    textAlign = TextAlign.Start,
+                    maxLines = 1
                 )
             }
         }
@@ -585,7 +586,9 @@ fun ResponseScreenPreview() {
     RokidGlassesTheme {
         ResponseScreen(
             uiState = GlassesUIState(
-                aiResponse = "Technological evolution and future of AI glasses.\n\n1. The Convergence of Miniaturization and Intelligence"
+                aiResponse = """
+                    Peanut allergies are typically caused by an immune system response to proteins found in peanuts. When someone with a peanut allergy consumes peanuts, their immune system mistakenly identifies these proteins as harmful, triggering an allergic reaction. The exact cause of why some individuals develop peanut allergies while others do not is not fully understood, but it may involve a combination of genetic and environmental factors.
+                """.trimIndent()
             ),
             scrollEvent = emptyFlow(),
             onDone = {}

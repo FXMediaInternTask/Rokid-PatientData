@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid API test</string>
-    <string name="app_title">Rokid API test</string>
+    <string name="app_name">Patient Data Assistant</string>
+    <string name="app_title">Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">Service Running</string>

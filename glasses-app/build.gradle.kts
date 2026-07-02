@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.fxMedia.RokidAPI"
+    namespace = "com.fxMedia.patientDataAssistantRokid"
     compileSdk = 36
 
     val localPropsFile = rootProject.file("local.properties")
@@ -31,11 +31,11 @@ android {
     ).all { !it.isNullOrBlank() }
 
     defaultConfig {
-        applicationId = "com.fxMedia.RokidAPI"
+        applicationId = "com.fxMedia.patientDataAssistantRokid"
         minSdk = 28
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 10
+        versionName = "0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

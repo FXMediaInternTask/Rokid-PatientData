@@ -10,7 +10,7 @@ plugins {
 }
 
 android {
-    namespace = "com.fxMedia.androidAPITest"
+    namespace = "com.fxMedia.patientDataAssistant"
     compileSdk = 36
 
     val localPropsFile = rootProject.file("local.properties")
@@ -33,11 +33,11 @@ android {
     ).all { !it.isNullOrBlank() }
 
     defaultConfig {
-        applicationId = "com.fxMedia.androidAPITest"
+        applicationId = "com.fxMedia.patientDataAssistant"
         minSdk = 28
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 12
+        versionName = "0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

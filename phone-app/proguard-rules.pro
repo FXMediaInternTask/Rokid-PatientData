@@ -64,11 +64,11 @@
 -keepclasseswithmembers class ** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.fxMedia.androidAPITest.**$$serializer { *; }
--keepclassmembers class com.fxMedia.androidAPITest.** {
+-keep,includedescriptorclasses class com.fxMedia.patientDataAssistant.**$$serializer { *; }
+-keepclassmembers class com.fxMedia.patientDataAssistant.** {
     *** Companion;
 }
--keepclasseswithmembers class com.fxMedia.androidAPITest.** {
+-keepclasseswithmembers class com.fxMedia.patientDataAssistant.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 

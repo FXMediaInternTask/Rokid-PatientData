@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI Assistente</string>
-    <string name="app_title">Rokid AI Assistente (Telefono)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">Servizio in esecuzione</string>
@@ -341,7 +341,7 @@
     <string name="close">Chiudi</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">Benvenuto in Rokid AI</string>
+    <string name="home_welcome">Benvenuto in VAD Patient Data Assistant</string>
     <string name="home_subtitle">Il tuo assistente intelligente per occhiali smart</string>
     <string name="quick_actions">Azioni rapide</string>
     <string name="glasses_status">Stato occhiali</string>

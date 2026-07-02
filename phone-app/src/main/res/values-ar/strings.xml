@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">مساعد Rokid AI</string>
-    <string name="app_title">مساعد Rokid AI (الهاتف)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">الخدمة قيد التشغيل</string>
@@ -341,7 +341,7 @@
     <string name="close">إغلاق</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">مرحباً بك في Rokid AI</string>
+    <string name="home_welcome">مرحباً بك في VAD Patient Data Assistant</string>
     <string name="home_subtitle">مساعدك الذكي للنظارات الذكية</string>
     <string name="quick_actions">إجراءات سريعة</string>
     <string name="glasses_status">حالة النظارات</string>

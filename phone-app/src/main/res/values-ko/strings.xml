@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI 어시스턴트</string>
-    <string name="app_title">Rokid AI 어시스턴트 (폰)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">서비스 실행 중</string>
@@ -340,7 +340,7 @@
     <string name="close">닫기</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">Rokid AI에 오신 것을 환영합니다</string>
+    <string name="home_welcome">VAD Patient Data Assistant에 오신 것을 환영합니다</string>
     <string name="home_subtitle">스마트 안경을 위한 지능형 어시스턴트</string>
     <string name="quick_actions">빠른 작업</string>
     <string name="glasses_status">안경 상태</string>

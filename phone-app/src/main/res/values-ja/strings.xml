@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI アシスタント</string>
-    <string name="app_title">Rokid AI アシスタント（電話）</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">サービス実行中</string>
@@ -340,7 +340,7 @@
     <string name="close">閉じる</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">Rokid AI へようこそ</string>
+    <string name="home_welcome">VAD Patient Data Assistant へようこそ</string>
     <string name="home_subtitle">スマートグラスのインテリジェントアシスタント</string>
     <string name="quick_actions">クイックアクション</string>
     <string name="glasses_status">グラスの状態</string>

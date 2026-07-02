@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rokid AI 助手</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
     
     <!-- 主頁面 -->
     <string name="main_title">連接您的 Rokid 眼鏡</string>

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI 助手</string>
-    <string name="app_title">Rokid AI 助手 (手机)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">服务运行中</string>
@@ -340,7 +340,7 @@
     <string name="close">关闭</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">欢迎使用 Rokid AI</string>
+    <string name="home_welcome">欢迎使用 VAD Patient Data Assistant</string>
     <string name="home_subtitle">您的智能眼镜智能助手</string>
     <string name="quick_actions">快捷操作</string>
     <string name="glasses_status">眼镜状态</string>

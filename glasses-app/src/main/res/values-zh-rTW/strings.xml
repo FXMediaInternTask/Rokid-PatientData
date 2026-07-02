@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rokid AI</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
     
     <!-- Status -->
     <string name="listening">正在聆聽...</string>
@@ -72,10 +72,10 @@
     
     <!-- AI System Prompt -->
     <string name="glasses_system_prompt">你是安裝在 Rokid 智慧眼鏡上的友善 AI 助理。請用使用者的語言回答問題，每次回覆不超過 100 字。</string>
-    <string name="glasses_system_prompt_ack">了解，我是您的 Rokid AI 助理。我會簡潔地協助您。有什麼可以幫您的嗎？</string>
+    <string name="glasses_system_prompt_ack">了解，我是您的 VAD Patient Data Assistant。我會簡潔地協助您。有什麼可以幫您的嗎？</string>
     <!-- Wake Word Service -->
     <string name="wake_word_channel_name">語音喚醒服務</string>
     <string name="wake_word_channel_description">持續監聽語音喚醒指令</string>
-    <string name="wake_word_notification_title">Rokid AI Assistant</string>
+    <string name="wake_word_notification_title">VAD Patient Data Assistant</string>
     <string name="wake_word_notification_text">說「Hi Rokid」開始對話</string>
 </resources>

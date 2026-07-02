@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rokid AI</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
     
     <!-- Status -->
     <string name="listening">듣는 중...</string>
@@ -76,6 +76,6 @@
     <!-- Wake Word Service -->
     <string name="wake_word_channel_name">음성 깨우기 서비스</string>
     <string name="wake_word_channel_description">음성 깨우기 명령을 지속적으로 대기합니다</string>
-    <string name="wake_word_notification_title">Rokid AI Assistant</string>
+    <string name="wake_word_notification_title">VAD Patient Data Assistant</string>
     <string name="wake_word_notification_text">「Hi Rokid」라고 말해 대화를 시작하세요</string>
 </resources>

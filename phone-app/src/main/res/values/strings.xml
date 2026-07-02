@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid API test</string>
-    <string name="app_title">Rokid API test</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">Service Running</string>
@@ -357,7 +357,7 @@
     <string name="close">Close</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">Welcome to Rokid Annotate</string>
+    <string name="home_welcome">Welcome to VAD Patient Data Assistant</string>
     <string name="home_subtitle">Start take a photo and record on your rokid glasses</string>
     <string name="quick_actions">Quick Actions</string>
     <string name="glasses_status">Glasses Status</string>

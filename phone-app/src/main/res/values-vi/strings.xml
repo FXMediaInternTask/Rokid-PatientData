@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI Assistant</string>
-    <string name="app_title">Rokid AI Assistant (Điện thoại)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">Dịch vụ đang chạy</string>
@@ -341,7 +341,7 @@
     <string name="close">Đóng</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">Chào mừng đến Rokid AI</string>
+    <string name="home_welcome">Chào mừng đến VAD Patient Data Assistant</string>
     <string name="home_subtitle">Trợ lý thông minh cho kính thông minh của bạn</string>
     <string name="quick_actions">Hành động nhanh</string>
     <string name="glasses_status">Trạng thái kính</string>

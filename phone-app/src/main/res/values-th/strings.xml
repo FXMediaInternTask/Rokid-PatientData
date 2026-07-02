@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App Info -->
-    <string name="app_name">Rokid AI Assistant</string>
-    <string name="app_title">Rokid AI Assistant (โทรศัพท์)</string>
+    <string name="app_name">VAD Patient Data Assistant</string>
+    <string name="app_title">VAD Patient Data Assistant</string>
     
     <!-- Service Status -->
     <string name="service_running">บริการกำลังทำงาน</string>
@@ -343,7 +343,7 @@
     <string name="close">ปิด</string>
     
     <!-- Home Screen -->
-    <string name="home_welcome">ยินดีต้อนรับสู่ Rokid AI</string>
+    <string name="home_welcome">ยินดีต้อนรับสู่ VAD Patient Data Assistant</string>
     <string name="home_subtitle">ผู้ช่วยอัจฉริยะสำหรับแว่นอัจฉริยะของคุณ</string>
     <string name="quick_actions">การดำเนินการด่วน</string>
     <string name="glasses_status">สถานะแว่น</string>

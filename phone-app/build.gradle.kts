@@ -36,8 +36,8 @@ android {
         applicationId = "com.fxMedia.vadPatientDataAssistantAndroid"
         minSdk = 28
         targetSdk = 34
-        versionCode = 12
-        versionName = "0.12"
+        versionCode = 14
+        versionName = "0.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -278,15 +278,13 @@ private fun ActionRow(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = when {
-                        isConnected -> connectedGlassesName ?: "Connected"
-                        isConnecting -> "Connecting..."
-                        else -> "Disconnected"
+                        isConnected -> "Paired"
+                        isConnecting -> "Pairing"
+                        else -> "Pair"
                     },
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = Color.White,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.weight(1f)
                 )
                 Image(
                     painter = painterResource(id = if (isConnected) R.drawable.checklist_on else R.drawable.checklist_off),
@@ -312,12 +310,10 @@ private fun ActionRow(
                 Image(painterResource(id = R.drawable.chatbot_icon), null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isLoggedIn) "Authenticated" else "Auth Required",
+                    text = if (isLoggedIn) "Active" else "Login",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.weight(1f)
                 )
                 if (isLoginLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = Color.White)
@@ -465,9 +461,9 @@ private fun ChatMessageBubble(text: String) {
                 contentScale = ContentScale.FillBounds
             )
             Text(
-                text = formatMarkdown(text.trim()),
+                text = formatMarkdown(text.trim().replace("###", "")),
                 color = Color.White,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -563,7 +559,10 @@ private fun formatMarkdown(text: String): androidx.compose.ui.text.AnnotatedStri
 fun HomeScreenPreview() {
     RokidPhoneTheme {
         HomeScreenContent(
-            transcripts = listOf("You: Hi, Good afternoon!", "AI: Good afternoon! How can I help?"),
+            transcripts = listOf(
+                "You: Hi, I'd like to know more about peanut allergies.",
+                "AI: Peanut allergies are typically caused by an immune system response to proteins found in peanuts. When someone with a peanut allergy consumes peanuts, their immune system mistakenly identifies these proteins as harmful, triggering an allergic reaction. The exact cause of why some individuals develop peanut allergies while others do not is not fully understood, but it may involve a combination of genetic and environmental factors. ###"
+            ),
             connectionState = ConnectionState.CONNECTED,
             connectedGlassesName = "Rokid Max",
             isLiveActive = true,

@@ -112,10 +112,12 @@ class GlassesViewModel(
 
     fun onNavigateUp() {
         viewModelScope.launch { _scrollEvent.emit(-1) }
+        // add debug
     }
 
     fun onNavigateDown() {
         viewModelScope.launch { _scrollEvent.emit(1) }
+        //add debug
     }
 
     /* Manual Recording methods commented out

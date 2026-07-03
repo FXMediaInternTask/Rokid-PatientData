@@ -235,7 +235,7 @@ fun ResponseScreen(
         uiState.aiResponse.split("\n").forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
             var currentLine = ""
-            val maxChars = 38 
+            val maxChars = 28 
             paragraph.split(" ").forEach { word ->
                 if ((currentLine.length + word.length + 1) > maxChars) {
                     lines.add(currentLine.trim())
@@ -246,7 +246,7 @@ fun ResponseScreen(
             }
             if (currentLine.isNotEmpty()) lines.add(currentLine.trim())
         }
-        lines.chunked(4)
+        lines.chunked(3)
     }
     
     // In Live Mode or Recording state, we might not have a response yet but we are listening
@@ -301,10 +301,11 @@ fun ResponseScreen(
                     Text(
                         text = line,
                         color = rokidWhite, 
-                        fontSize = 24.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
-                        lineHeight = 34.sp,
-                        textAlign = TextAlign.Start
+                        lineHeight = 26.sp,
+                        textAlign = TextAlign.Start,
+                        maxLines = 1
                     )
                 }
             }
@@ -627,7 +628,9 @@ fun ResponseScreenPreview() {
     RokidGlassesTheme {
         ResponseScreen(
             uiState = GlassesUIState(
-                aiResponse = "Technological evolution and future of AI glasses.\n\n1. The Convergence of Miniaturization and Intelligence",
+                aiResponse = """
+                    The patient's name is Emaline Bte Hamza, age 34, and she is female. Her allergies include peanuts and latex. Currently, she is taking antihistamines and paracetamol. There are no previous visit records available.
+                """.trimIndent(),
                 isLiveActive = true,
                 isListening = true
             ),

@@ -305,7 +305,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 logManager.d(TAG, "Starting transcription with language: $language")
                 when (val result = service.transcribe(audioData, language)) {
                     is SpeechResult.Success -> {
-                        val cleanedText = result.text.replace("**", "")
+                        val cleanedText = result.text.replace("**", "").replace("###", "")
                         logManager.i(TAG, "Transcription Success: $cleanedText")
                         logManager.d(TAG, "Sending transcript to glasses...")
                         viewModelScope.launch {
@@ -371,7 +371,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 tokenManager.saveSessionId(currentSessionId)
 
                 val rawReply = response.data?.reply ?: "Empty reply from AI"
-                val reply = rawReply.replace("**", "")
+                val reply = rawReply.replace("**", "").replace("###", "")
                 logManager.i(TAG, "AI Response Received: $reply")
                 
                 // 1. Trigger TTS in background IMMEDIATELY
@@ -490,7 +490,7 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateTranscripts(text: String) {
         _uiState.update { state ->
             val currentList = state.transcripts
-            val cleanedText = text.replace("**", "")
+            val cleanedText = text.replace("**", "").replace("###", "")
             val newList = (listOf(cleanedText) + currentList).take(50)
             state.copy(transcripts = newList)
         }

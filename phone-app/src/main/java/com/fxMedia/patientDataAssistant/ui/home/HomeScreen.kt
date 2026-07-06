@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -169,27 +169,26 @@ fun HomeScreenContent(
                         contentScale = ContentScale.FillBounds
                     )
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.wifi_icon),
+                        Icon(
+                            imageVector = Icons.Default.Bluetooth,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(24.dp),
+                            tint = Color.White
                         )
                         Text(
                             text = when (connectionState) {
-                                ConnectionState.CONNECTED -> "Connected"
-                                ConnectionState.CONNECTING -> "Connecting"
-                                else -> "Disconnected"
+                                ConnectionState.CONNECTED -> "Paired"
+                                ConnectionState.CONNECTING -> "Pairing"
+                                else -> "Pair"
                             },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = Color.White
                         )
+                        Spacer(modifier = Modifier.weight(1f))
                         Image(
                             painter = painterResource(
                                 id = if (connectionState == ConnectionState.CONNECTED) R.drawable.checklist_on else R.drawable.checklist_off
@@ -221,7 +220,7 @@ fun HomeScreenContent(
                         contentScale = ContentScale.FillBounds
                     )
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -231,13 +230,11 @@ fun HomeScreenContent(
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
-                            text = if (isLoggedIn) "Authenticated" else "Authenticate",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            text = if (isLoggedIn) "Active" else "Login",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = Color.White
                         )
+                        Spacer(modifier = Modifier.weight(1f))
                         Image(
                             painter = painterResource(
                                 id = if (isLoggedIn) R.drawable.checklist_on else R.drawable.checklist_off
@@ -323,7 +320,7 @@ fun HomeScreenContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Input Section
             Row(
@@ -395,18 +392,6 @@ fun HomeScreenContent(
             )
         }
 
-        // Floating Menu Button (Left side)
-        IconButton(
-            onClick = { /* Handle Menu */ },
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 0.dp)
-                .offset(y = (-40).dp) // Adjust to match image position
-                .size(48.dp)
-                .background(Color(0xFF333337).copy(alpha = 0.8f), CircleShape)
-        ) {
-            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-        }
     }
 }
 

@@ -17,7 +17,9 @@ data class ChatResponseData(
     @SerializedName("reply")
     val reply: String?,
     @SerializedName("history")
-    val history: List<ChatHistory>?
+    val history: List<ChatHistory>?,
+    @SerializedName("suggestions")
+    val suggestions: List<String>?
 )
 
 data class ChatHistory(

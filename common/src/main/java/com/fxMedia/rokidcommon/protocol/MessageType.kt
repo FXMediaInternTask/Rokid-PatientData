@@ -24,6 +24,7 @@ enum class MessageType(val code: Int) {
     AI_RESPONSE_TEXT(0x21),      // Phone -> Glasses: Text response
     AI_RESPONSE_TTS(0x22),       // Phone -> Glasses: TTS audio
     USER_TRANSCRIPT(0x23),       // Internal: User speech recognition result (for syncing to phone UI)
+    AI_SUGGESTIONS(0x24),        // Phone -> Glasses: AI suggestion buttons
     AI_ERROR(0x2F),              // Phone -> Glasses: Error message
     
     // Display control (0x30-0x3F)

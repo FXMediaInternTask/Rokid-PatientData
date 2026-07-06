@@ -229,11 +229,21 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                 currentSessionId = response.data?.sessionId
                 tokenManager.saveSessionId(currentSessionId)
 
-                val reply = response.data?.reply?.replace("**", "") ?: "Empty reply from AI"
+                val baseReply: String = response.data?.reply ?: "Empty reply from AI"
+                val allSuggestions: List<String>? = response.data?.suggestions
+                val suggestions: List<String>? = allSuggestions?.take(2)
                 
-                // Trigger TTS: This prepares audio for glasses and phone
-                // We wait for the audio to be generated before showing text/playing
-                ttsService.speak(reply) { audioData ->
+                // Clean the base reply for TTS and glasses display
+                val cleanBaseReply = baseReply.replace("**", "").replace("###", "")
+                
+                // For Phone UI: combined text
+                val suggestionText = if (suggestions != null && !suggestions.isEmpty()) {
+                    "\n\nSuggestions:\n" + suggestions.joinToString("\n") { s: String -> "• $s" }
+                } else ""
+                val phoneDisplayReply = (cleanBaseReply + suggestionText)
+                
+                // Trigger TTS with the base reply
+                ttsService.speak(cleanBaseReply) { audioData ->
                     // This block runs when audio data is successfully synthesized (from ElevenLabs or Fallback)
                     viewModelScope.launch {
                         // 1. Send Audio to glasses first (largest payload)
@@ -244,15 +254,22 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
                             ))
                         }
                         
-                        // 2. Send Text to glasses
+                        // 2. Send Text to glasses (Main body only)
                         btManager.sendMessage(Message(
                             type = MessageType.AI_RESPONSE_TEXT, 
-                            payload = reply
+                            payload = cleanBaseReply
                         ))
+
+                        // 3. Send Suggestions to glasses (For the new boxes)
+                        if (suggestions != null && !suggestions.isEmpty()) {
+                            btManager.sendMessage(Message(
+                                type = MessageType.AI_SUGGESTIONS,
+                                payload = suggestions.joinToString("|")
+                            ))
+                        }
                         
-                        // 3. Update Phone UI and trigger local playback
-                        // Note: TextToSpeechService already handles local playback inside speak()
-                        updateTranscripts("AI: $reply")
+                        // 4. Update Phone UI with full text
+                        updateTranscripts("AI: $phoneDisplayReply")
                     }
                 }
 

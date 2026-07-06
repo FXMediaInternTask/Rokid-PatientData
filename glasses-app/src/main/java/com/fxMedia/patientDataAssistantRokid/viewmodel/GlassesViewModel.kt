@@ -46,7 +46,8 @@ data class GlassesUIState(
     val displayText: String = "Tap to start",
     val hintText: String = "Please connect phone",
     val aiResponse: String = "",
-    val userTranscript: String = ""
+    val userTranscript: String = "",
+    val suggestions: List<String> = emptyList()
 )
 
 class GlassesViewModel(
@@ -103,13 +104,8 @@ class GlassesViewModel(
         if (currentState.isListening) {
             stopRecording()
         } else {
-            if (_appScreen.value == AppScreen.Main) {
-                startRecording()
-            } else {
-                // Return to main state after viewing a response
-                _appScreen.value = AppScreen.Main
-                _uiState.update { it.copy(displayText = "Tap to start", hintText = "Ready") }
-            }
+            // Always start recording when connected and idle (Response or Main)
+            startRecording()
         }
     }
 
@@ -119,6 +115,30 @@ class GlassesViewModel(
 
     fun onNavigateDown() {
         viewModelScope.launch { _scrollEvent.emit(1) }
+    }
+
+    fun requestPatientData() {
+        if (!_uiState.value.isConnected) return
+        if (_uiState.value.isProcessing) return
+
+        _uiState.update {
+            it.copy(
+                isProcessing = true,
+                displayText = "Fetching data...",
+                hintText = "AI is looking up records",
+                aiResponse = "",
+                suggestions = emptyList()
+            )
+        }
+
+        viewModelScope.launch {
+            bluetoothClient.sendMessage(
+                Message(
+                    type = MessageType.USER_TRANSCRIPT,
+                    payload = "Can you get me this patient data?"
+                )
+            )
+        }
     }
 
     fun startRecording() {
@@ -158,7 +178,8 @@ class GlassesViewModel(
                 displayText = "Listening...",
                 hintText = "Tap to stop",
                 userTranscript = "",
-                aiResponse = ""
+                aiResponse = "",
+                suggestions = emptyList()
             )
         }
 
@@ -336,6 +357,13 @@ class GlassesViewModel(
                     pendingTtsAudio = audioData
                 }
             }
+            MessageType.AI_SUGGESTIONS -> {
+                val suggestionsText = message.payload ?: ""
+                if (suggestionsText.isNotEmpty()) {
+                    val suggestionsList = suggestionsText.split("|")
+                    _uiState.update { it.copy(suggestions = suggestionsList) }
+                }
+            }
             MessageType.AI_ERROR -> {
                 _uiState.update {
                     it.copy(
@@ -450,6 +478,12 @@ class GlassesViewModel(
         viewModelScope.launch {
             bluetoothClient.connectionState.collect { state ->
                 val isConnected = state == BluetoothClientState.CONNECTED
+                
+                // On disconnect, force back to Main screen
+                if (!isConnected) {
+                    _appScreen.value = AppScreen.Main
+                }
+
                 _uiState.update {
                     it.copy(
                         bluetoothState = state,

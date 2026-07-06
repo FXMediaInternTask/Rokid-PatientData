@@ -187,6 +187,7 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                             availableDevices = uiState.availableDevices,
                             showDeviceSelector = uiState.showDeviceSelector,
                             onScreenTap = { viewModel.onPrimaryTap() },
+                            onPatientDataClick = { viewModel.requestPatientData() },
                             onDeviceSelected = { device -> viewModel.connectToDevice(device) },
                             onDismissSelector = { viewModel.dismissDeviceSelector() }
                         )
@@ -231,8 +232,13 @@ fun ResponseScreen(
 
     // Logic to split text into pages (4 lines per page)
     val pages = remember(uiState.aiResponse) {
+        val cleanResponse = uiState.aiResponse
+            .replace("###", "")
+            .replace("**", "")
+            .trim()
+            
         val lines = mutableListOf<String>()
-        uiState.aiResponse.split("\n").forEach { paragraph ->
+        cleanResponse.split("\n").forEach { paragraph ->
             if (paragraph.isBlank()) return@forEach
             var currentLine = ""
             val maxChars = 28 
@@ -247,6 +253,27 @@ fun ResponseScreen(
             if (currentLine.isNotEmpty()) lines.add(currentLine.trim())
         }
         lines.chunked(3)
+    }
+
+    // Auto-scroll logic
+    var progress by remember(currentPageIndex) { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(currentPageIndex, pages.size) {
+        if (pages.size <= 1 || currentPageIndex >= pages.size - 1) return@LaunchedEffect
+        
+        val duration = 3000L
+        val startTime = System.currentTimeMillis()
+        
+        while (true) {
+            val elapsed = System.currentTimeMillis() - startTime
+            progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
+            
+            if (elapsed >= duration) {
+                currentPageIndex = (currentPageIndex + 1).coerceIn(0, pages.size - 1)
+                break
+            }
+            kotlinx.coroutines.delay(20)
+        }
     }
     
     if (pages.isEmpty()) {
@@ -271,6 +298,47 @@ fun ResponseScreen(
                 interactionSource = remember { MutableInteractionSource() }
             ) { onDone() }
     ) {
+        // Suggestions Boxes
+        if (uiState.suggestions.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 85.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 30.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Suggestion",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 0.dp)
+                )
+                
+                uiState.suggestions.take(1).forEach { suggestion ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.5.dp, Color.White, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 15.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = suggestion,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+
         // Main Text Area
         Column(
             modifier = Modifier
@@ -284,9 +352,9 @@ fun ResponseScreen(
                 Text(
                     text = line,
                     color = rokidWhite, // Use green as in screenshot
-                    fontSize = 22.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
-                    lineHeight = 32.sp,
+                    lineHeight = 26.sp,
                     textAlign = TextAlign.Start,
                     maxLines = 1
                 )
@@ -496,6 +564,7 @@ fun TranslateMainScreenContent(
     availableDevices: List<BluetoothDevice>,
     showDeviceSelector: Boolean,
     onScreenTap: () -> Unit,
+    onPatientDataClick: () -> Unit,
     onDeviceSelected: (BluetoothDevice) -> Unit,
     onDismissSelector: () -> Unit
 ) {
@@ -513,25 +582,64 @@ fun TranslateMainScreenContent(
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = displayText,
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = hintText,
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 18.sp,
-                textAlign = TextAlign.Center
-            )
+            if (!isConnected) {
+                Text(
+                    text = displayText,
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = hintText,
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = "Connected",
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Tap to record",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            /*if (!isProcessing && isConnected) {
+                Box(
+                    modifier = Modifier
+                        .border(1.5.dp, Color.White, RoundedCornerShape(12.dp))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onPatientDataClick() }
+                        .padding(horizontal = 24.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "Patient Data",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }*/
             
             if (isProcessing) {
-                Spacer(modifier = Modifier.height(32.dp))
                 CircularProgressIndicator(color = Color(0xFF00FF00))
             }
         }
@@ -544,6 +652,7 @@ fun TranslateMainScreenContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Connection Status
             Box(
                 modifier = Modifier
                     .size(8.dp)
@@ -573,7 +682,7 @@ fun TranslateMainScreenContent(
 @Composable
 fun AppVersionDisplay(modifier: Modifier = Modifier) {
     Text(
-        text = "v1.0.4",
+        text = "v${BuildConfig.VERSION_NAME}",
         color = Color.White.copy(alpha = 0.3f),
         fontSize = 12.sp,
         modifier = modifier
@@ -587,8 +696,13 @@ fun ResponseScreenPreview() {
         ResponseScreen(
             uiState = GlassesUIState(
                 aiResponse = """
-                    Peanut allergies are typically caused by an immune system response to proteins found in peanuts. When someone with a peanut allergy consumes peanuts, their immune system mistakenly identifies these proteins as harmful, triggering an allergic reaction. The exact cause of why some individuals develop peanut allergies while others do not is not fully understood, but it may involve a combination of genetic and environmental factors.
-                """.trimIndent()
+                    Peanut allergies are typically caused by an immune system response to proteins found in peanuts. 
+                    When someone with a peanut allergy consumes peanuts, their immune system mistakenly identifies these proteins as harmful, triggering an allergic reaction.
+                """.trimIndent(),
+                suggestions = listOf(
+                    "Inquire about any recent symptoms or health concerns.",
+                    "Discuss lifestyle factors such as diet and exercise habits."
+                )
             ),
             scrollEvent = emptyFlow(),
             onDone = {}
@@ -610,6 +724,7 @@ fun MainScreenPreview() {
             availableDevices = emptyList(),
             showDeviceSelector = false,
             onScreenTap = {},
+            onPatientDataClick = {},
             onDeviceSelected = {},
             onDismissSelector = {}
         )

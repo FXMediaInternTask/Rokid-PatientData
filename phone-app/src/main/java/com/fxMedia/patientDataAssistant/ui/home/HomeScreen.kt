@@ -210,7 +210,7 @@ fun HomeScreenContent(
                     modifier = Modifier
                         .weight(1f)
                         .height(64.dp)
-                        .clickable { onLogin() },
+                        .clickable(enabled = !isLoginLoading) { onLogin() },
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
@@ -219,29 +219,38 @@ fun HomeScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.FillBounds
                     )
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.chatbot_icon),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
+                    
+                    if (isLoginLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
                         )
-                        Text(
-                            text = if (isLoggedIn) "Active" else "Login",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Image(
-                            painter = painterResource(
-                                id = if (isLoggedIn) R.drawable.checklist_on else R.drawable.checklist_off
-                            ),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.chatbot_icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = if (isLoggedIn) "Active" else "Login",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Image(
+                                painter = painterResource(
+                                    id = if (isLoggedIn) R.drawable.checklist_on else R.drawable.checklist_off
+                                ),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 

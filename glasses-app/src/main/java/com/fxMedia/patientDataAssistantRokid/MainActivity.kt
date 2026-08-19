@@ -21,6 +21,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -173,19 +178,11 @@ fun TranslateMainScreen(viewModel: GlassesViewModel) {
                             uiState = uiState,
                             onScreenTap = { viewModel.onPrimaryTap() },
                             onDeviceSelected = { device -> viewModel.connectToDevice(device) },
-                            showDeviceSelector = uiState.showDeviceSelector,
                             onDismissDeviceSelector = { viewModel.dismissDeviceSelector() }
                         )
                     } else {
                         TranslateMainScreenContent(
-                            isConnected = uiState.isConnected,
-                            isListening = uiState.isListening,
-                            isProcessing = uiState.isProcessing,
-                            displayText = uiState.displayText,
-                            hintText = uiState.hintText,
-                            connectedDeviceName = uiState.connectedDeviceName,
-                            availableDevices = uiState.availableDevices,
-                            showDeviceSelector = uiState.showDeviceSelector,
+                            uiState = uiState,
                             onScreenTap = { viewModel.onPrimaryTap() },
                             onPatientDataClick = { viewModel.requestPatientData() },
                             onDeviceSelected = { device -> viewModel.connectToDevice(device) },
@@ -487,7 +484,6 @@ fun ConnectionScreen(
     uiState: GlassesUIState,
     onScreenTap: () -> Unit,
     onDeviceSelected: (BluetoothDevice) -> Unit,
-    showDeviceSelector: Boolean,
     onDismissDeviceSelector: () -> Unit
 ) {
     Box(
@@ -511,9 +507,11 @@ fun ConnectionScreen(
             )
         }
 
-        if (showDeviceSelector) {
+        if (uiState.showDeviceSelector) {
             DeviceSelectorDialog(
                 devices = uiState.availableDevices,
+                selectedIndex = uiState.selectedDeviceIndex,
+                lastAddress = uiState.lastConnectedAddress,
                 onDeviceSelected = onDeviceSelected,
                 onDismiss = onDismissDeviceSelector
             )
@@ -524,24 +522,69 @@ fun ConnectionScreen(
 @Composable
 fun DeviceSelectorDialog(
     devices: List<BluetoothDevice>,
+    selectedIndex: Int,
+    lastAddress: String?,
     onDeviceSelected: (BluetoothDevice) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val listState = rememberLazyListState()
+    
+    LaunchedEffect(selectedIndex) {
+        if (devices.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Phone to Connect") },
         text = {
-            Column {
+            Box(modifier = Modifier.heightIn(max = 300.dp)) {
                 if (devices.isEmpty()) {
                     Text("No paired devices found. Please pair in Settings.")
                 } else {
-                    devices.forEach { device ->
-                        @Suppress("MissingPermission")
-                        TextButton(
-                            onClick = { onDeviceSelected(device) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(device.name ?: "Unknown Device")
+                    LazyColumn(state = listState) {
+                        itemsIndexed(devices) { index, device ->
+                            val isSelected = index == selectedIndex
+                            val isRemembered = device.address == lastAddress
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(
+                                        if (isSelected) Color.White.copy(alpha = 0.2f) 
+                                        else Color.Transparent,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        if (isSelected) 2.dp else 0.dp,
+                                        if (isSelected) Color.White else Color.Transparent,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { onDeviceSelected(device) }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                @Suppress("MissingPermission")
+                                val deviceName = device.name ?: "Unknown Device"
+                                Text(
+                                    text = deviceName,
+                                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                if (isRemembered) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = "Remembered",
+                                        tint = Color.Yellow,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -555,19 +598,15 @@ fun DeviceSelectorDialog(
 
 @Composable
 fun TranslateMainScreenContent(
-    isConnected: Boolean,
-    isListening: Boolean,
-    isProcessing: Boolean,
-    displayText: String,
-    hintText: String,
-    connectedDeviceName: String?,
-    availableDevices: List<BluetoothDevice>,
-    showDeviceSelector: Boolean,
+    uiState: GlassesUIState,
     onScreenTap: () -> Unit,
     onPatientDataClick: () -> Unit,
     onDeviceSelected: (BluetoothDevice) -> Unit,
     onDismissSelector: () -> Unit
 ) {
+    val isConnected = uiState.isConnected
+    val isProcessing = uiState.isProcessing
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -584,7 +623,7 @@ fun TranslateMainScreenContent(
         ) {
             if (!isConnected) {
                 Text(
-                    text = displayText,
+                    text = uiState.displayText,
                     color = Color.White,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
@@ -594,7 +633,7 @@ fun TranslateMainScreenContent(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = hintText,
+                    text = uiState.hintText,
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 18.sp,
                     textAlign = TextAlign.Center
@@ -620,25 +659,6 @@ fun TranslateMainScreenContent(
                 Spacer(modifier = Modifier.height(32.dp))
             }
 
-            /*if (!isProcessing && isConnected) {
-                Box(
-                    modifier = Modifier
-                        .border(1.5.dp, Color.White, RoundedCornerShape(12.dp))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { onPatientDataClick() }
-                        .padding(horizontal = 24.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = "Patient Data",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }*/
-            
             if (isProcessing) {
                 CircularProgressIndicator(color = Color(0xFF00FF00))
             }
@@ -663,15 +683,17 @@ fun TranslateMainScreenContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (isConnected) "Connected: ${connectedDeviceName ?: "Phone"}" else "Disconnected",
+                text = if (isConnected) "Connected: ${uiState.connectedDeviceName ?: "Phone"}" else "Disconnected",
                 color = Color.White,
                 fontSize = 12.sp
             )
         }
         
-        if (showDeviceSelector) {
+        if (uiState.showDeviceSelector) {
             DeviceSelectorDialog(
-                devices = availableDevices,
+                devices = uiState.availableDevices,
+                selectedIndex = uiState.selectedDeviceIndex,
+                lastAddress = uiState.lastConnectedAddress,
                 onDeviceSelected = onDeviceSelected,
                 onDismiss = onDismissSelector
             )
@@ -715,14 +737,12 @@ fun ResponseScreenPreview() {
 fun MainScreenPreview() {
     RokidGlassesTheme {
         TranslateMainScreenContent(
-            isConnected = true,
-            isListening = false,
-            isProcessing = false,
-            displayText = "Connected",
-            hintText = "Tap to record",
-            connectedDeviceName = "Rokid Phone",
-            availableDevices = emptyList(),
-            showDeviceSelector = false,
+            uiState = GlassesUIState(
+                isConnected = true,
+                displayText = "Connected",
+                hintText = "Tap to record",
+                connectedDeviceName = "Rokid Phone"
+            ),
             onScreenTap = {},
             onPatientDataClick = {},
             onDeviceSelected = {},
@@ -731,7 +751,7 @@ fun MainScreenPreview() {
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Preview(showBackground = true, backgroundColor = 0xFF000000, device = "spec:width=640dp,height=840dp")
 @Composable
 fun RecordingScreenPreview() {
     RokidGlassesTheme {

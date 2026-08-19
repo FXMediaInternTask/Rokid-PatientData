@@ -16,7 +16,7 @@ data class UserData(
     @SerializedName("username") val username: String?,
     @SerializedName("email") val email: String?,
     @SerializedName("name") val name: String?,
-    @SerializedName("status") val status: String?,
+    @SerializedName("status") val status: Int?,
     @SerializedName("role") val role: String?,
     @SerializedName("role_label") val roleLabel: String?,
     @SerializedName("staff_id") val staffId: String?,
@@ -28,5 +28,7 @@ data class UserData(
     @SerializedName("address") val address: String?,
     @SerializedName("about") val about: String?,
     @SerializedName("experience") val experience: String?,
-    @SerializedName("last_login") val lastLogin: String?
+    @SerializedName("last_login") val lastLogin: Long?,
+    @SerializedName("roles") val roles: List<String>?,
+    @SerializedName("access") val access: List<String>?
 )

@@ -38,6 +38,8 @@ data class GlassesUIState(
     val isListening: Boolean = false,
     val isProcessing: Boolean = false,
     val showDeviceSelector: Boolean = false,
+    val selectedDeviceIndex: Int = 0,
+    val lastConnectedAddress: String? = null,
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val bluetoothState: BluetoothClientState = BluetoothClientState.DISCONNECTED,
     val connectedDeviceName: String? = null,
@@ -69,6 +71,7 @@ class GlassesViewModel(
 
     private val bluetoothClient = BluetoothSppClient(context, viewModelScope)
     private var cxrServiceManager: CxrServiceManager? = null
+    private val prefs = context.getSharedPreferences("bluetooth_prefs", Context.MODE_PRIVATE)
 
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
@@ -78,9 +81,11 @@ class GlassesViewModel(
     private var pendingTtsAudio: ByteArray? = null
 
     init {
+        val savedAddress = prefs.getString("last_device_address", null)
+        _uiState.update { it.copy(lastConnectedAddress = savedAddress) }
+        
         initializeBluetooth()
         initializeCxrService()
-
     }
 
     /**
@@ -95,6 +100,11 @@ class GlassesViewModel(
         // Stop any ongoing TTS playback when user interacts
         stopPlayback()
         
+        if (currentState.showDeviceSelector) {
+            onConfirm()
+            return
+        }
+
         if (!currentState.isConnected) {
             refreshPairedDevices()
             _uiState.update { it.copy(showDeviceSelector = true) }
@@ -110,11 +120,38 @@ class GlassesViewModel(
     }
 
     fun onNavigateUp() {
-        viewModelScope.launch { _scrollEvent.emit(-1) }
+        if (_uiState.value.showDeviceSelector) {
+            _uiState.update { state ->
+                val newIndex = (state.selectedDeviceIndex - 1).coerceAtLeast(0)
+                state.copy(selectedDeviceIndex = newIndex)
+            }
+        } else {
+            viewModelScope.launch { _scrollEvent.emit(-1) }
+        }
     }
 
     fun onNavigateDown() {
-        viewModelScope.launch { _scrollEvent.emit(1) }
+        if (_uiState.value.showDeviceSelector) {
+            _uiState.update { state ->
+                val newIndex = (state.selectedDeviceIndex + 1).coerceAtMost(
+                    (state.availableDevices.size - 1).coerceAtLeast(0)
+                )
+                state.copy(selectedDeviceIndex = newIndex)
+            }
+        } else {
+            viewModelScope.launch { _scrollEvent.emit(1) }
+        }
+    }
+
+    fun onConfirm() {
+        val currentState = _uiState.value
+        if (currentState.showDeviceSelector) {
+            if (currentState.availableDevices.isNotEmpty()) {
+                connectToDevice(currentState.availableDevices[currentState.selectedDeviceIndex])
+            } else {
+                dismissDeviceSelector()
+            }
+        }
     }
 
     fun requestPatientData() {
@@ -461,11 +498,21 @@ class GlassesViewModel(
             == PackageManager.PERMISSION_GRANTED
         ) {
             val devices = bluetoothClient.getPairedDevices()
-            _uiState.update { it.copy(availableDevices = devices) }
+            val lastAddress = _uiState.value.lastConnectedAddress
+            
+            // Sort so last connected device is at the top
+            val sortedDevices = devices.sortedByDescending { it.address == lastAddress }
+            
+            _uiState.update { it.copy(
+                availableDevices = sortedDevices,
+                selectedDeviceIndex = 0
+            ) }
         }
     }
 
     fun connectToDevice(device: BluetoothDevice) {
+        prefs.edit().putString("last_device_address", device.address).apply()
+        _uiState.update { it.copy(lastConnectedAddress = device.address) }
         bluetoothClient.connect(device)
         dismissDeviceSelector()
     }

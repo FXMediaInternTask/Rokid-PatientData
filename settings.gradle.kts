@@ -27,7 +27,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RokidChatbot"
+rootProject.name = "Rokid Patient Data"
 
 // Original integrated version of the app (for development and testing purposes)
 include(":app")

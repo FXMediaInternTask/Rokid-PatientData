@@ -10,7 +10,6 @@ import com.fxMedia.rokidcommon.protocol.MessageType
 import com.fxMedia.patientDataAssistant.api.RetrofitClient
 import com.fxMedia.patientDataAssistant.api.model.LoginRequest
 import com.fxMedia.patientDataAssistant.api.model.TestRequest
-import com.fxMedia.patientDataAssistant.api.model.ValidateTokenRequest
 import com.fxMedia.patientDataAssistant.data.TokenManager
 import com.fxMedia.patientDataAssistant.data.SettingsRepository
 import com.fxMedia.patientDataAssistant.service.BluetoothConnectionState
@@ -285,15 +284,18 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoginLoading = true) }
             try {
-                val response = RetrofitClient.authService.validateToken(ValidateTokenRequest(token = existingToken))
+                val response = RetrofitClient.authService.validateToken(existingToken)
                 if (response.status) {
                     _uiState.update { it.copy(isLoggedIn = true) }
+                    // Save new token if provided
+                    response.token?.let { tokenManager.saveToken(it) }
                 } else {
                     tokenManager.deleteToken()
                     _uiState.update { it.copy(isLoggedIn = false) }
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoggedIn = true) }
+                Log.e(TAG, "Token validation failed", e)
+                _uiState.update { it.copy(isLoggedIn = false) }
             } finally {
                 _uiState.update { it.copy(isLoginLoading = false) }
             }
@@ -301,6 +303,12 @@ class PhoneViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun performLogin() {
+        if (_uiState.value.isLoggedIn) {
+            // Perform Logout
+            tokenManager.deleteToken()
+            _uiState.update { it.copy(isLoggedIn = false) }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoginLoading = true) }
             try {
